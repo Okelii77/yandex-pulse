@@ -6,5 +6,5 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "yandex-pulse"
-database_id = "REPLACE_WITH_YOUR_D1_UUID"
+database_id = "f2ed0b6b-5483-453f-9298-129b8528547f"
 migrations_dir = "migrations"

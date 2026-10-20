@@ -104,9 +104,49 @@ async function history(env) {
   return {schema:1,retention_days:30,series};
 }
 
+/* GitHub Actions OIDC verifies caller identity without shared credentials. */
+const b64url = input => {
+  const str=input.replace(/-/g,"+").replace(/_/g,"/");
+  const decoded=atob(str+"=".repeat((4-str.length%4)%4));
+  return Uint8Array.from(decoded,c=>c.charCodeAt(0));
+};
+async function githubOidcValid(token) {
+  try {
+    if(!token || token.length>12000)return false;
+    const parts=token.split(".");
+    if(parts.length!==3)return false;
+    const header=JSON.parse(new TextDecoder().decode(b64url(parts[0])));
+    const claims=JSON.parse(new TextDecoder().decode(b64url(parts[1])));
+    const seconds=Math.floor(Date.now()/1000);
+    if(header.alg!=="RS256"||!header.kid||!Number.isInteger(claims.exp)||
+       claims.exp<=seconds||claims.exp>seconds+600 ||
+       claims.nbf>seconds || claims.iat>seconds+30 ||
+       claims.iss!=="https://token.actions.githubusercontent.com" ||
+       claims.aud!=="yandex-pulse-ingest" ||
+       claims.repository!=="Okelii77/yandex-pulse" ||
+       String(claims.repository_id)!=="1427282907" ||
+       claims.ref!=="refs/heads/main" ||
+       claims.workflow_ref!=="Okelii77/yandex-pulse/.github/workflows/pulse.yml@refs/heads/main")
+      return false;
+    const response=await fetch("https://token.actions.githubusercontent.com/.well-known/jwks",{
+      cf:{cacheTtl:3600,cacheEverything:true}
+    });
+    if(!response.ok)return false;
+    const jwks=await response.json();
+    const jwk=(jwks.keys||[]).find(x=>x.kid===header.kid&&x.kty==="RSA"&&x.use==="sig");
+    if(!jwk)return false;
+    const key=await crypto.subtle.importKey("jwk",jwk,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);
+    const signed=new TextEncoder().encode(parts[0]+"."+parts[1]);
+    return crypto.subtle.verify({name:"RSASSA-PKCS1-v1_5"},key,b64url(parts[2]),signed);
+  }catch{return false;}
+}
+
 async function ingest(request,env,cors) {
-  if (!env.INGEST_TOKEN || request.headers.get("Authorization") !== "Bearer " + env.INGEST_TOKEN)
-    return json({error:"unauthorized"},401,cors);
+  const authorization=request.headers.get("Authorization") || "";
+  const bearer=authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const legacy=!!env.INGEST_TOKEN && authorization==="Bearer "+env.INGEST_TOKEN;
+  const verified=legacy || await githubOidcValid(bearer);
+  if (!verified) return json({error:"unauthorized"},401,cors);
   const length=Number(request.headers.get("Content-Length")||0);
   if(length>MAX_PAYLOAD_BYTES) return json({error:"payload_too_large"},413,cors);
   const raw=await request.text();

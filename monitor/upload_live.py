@@ -9,7 +9,18 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 def main():
     base = os.environ["PULSE_API_URL"].rstrip("/")
-    token = os.environ["PULSE_INGEST_TOKEN"]
+    token = os.environ.get("PULSE_INGEST_TOKEN", "").strip()
+    if not token:
+        url = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL", "")
+        runtime_token = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+        if not url or not runtime_token:
+            raise SystemExit("GitHub Actions OIDC environment is unavailable")
+        separator = "&" if "?" in url else "?"
+        request = urllib.request.Request(
+            url + separator + "audience=yandex-pulse-ingest",
+            headers={"Authorization": "bearer " + runtime_token})
+        with urllib.request.urlopen(request, timeout=15) as response:
+            token = json.loads(response.read(30000))["value"]
     if not base.startswith("https://") or not token:
         raise SystemExit("Live API / ingestion credential missing")
     raw = (ROOT / "site" / "status.json").read_bytes()
