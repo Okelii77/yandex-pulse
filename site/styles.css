@@ -142,7 +142,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,[tabindex]:focus-visibl
 .badge-dot{width:6px;height:6px;background:currentColor;border-radius:50%;flex-shrink:0}
 .badge.ok{color:var(--green);background:var(--green-bg)}.badge.down{color:var(--red);background:var(--red-bg)}
 .badge.degraded,.badge.no_data{color:var(--amber);background:var(--amber-bg)}
-.badge.not_configured,.badge.cooldown,.badge.unknown{color:var(--muted);background:var(--surface3)}
+.badge.not_configured,.badge.disabled,.badge.cooldown,.badge.unknown{color:var(--muted);background:var(--surface3)}
 .card-arrow{font-size:20px;color:var(--subtle);line-height:1}
 .category-intro{background:var(--surface2);border:1px solid var(--border);padding:18px 22px;border-radius:13px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .category-intro b{font-size:12px}.category-intro p{font-size:11px;color:var(--subtle);margin:4px 0 0}

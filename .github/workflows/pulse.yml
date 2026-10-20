@@ -46,6 +46,19 @@ jobs:
       - name: Check Yandex endpoints
         env:
           YANDEX_MUSIC_TOKEN: ${{ secrets.YANDEX_MUSIC_TOKEN }}
+          YANDEX_DISK_TOKEN: ${{ secrets.YANDEX_DISK_TOKEN }}
+          YANDEX_WIKI_TOKEN: ${{ secrets.YANDEX_WIKI_TOKEN }}
+          YANDEX_WIKI_ORG_ID: ${{ vars.YANDEX_WIKI_ORG_ID || secrets.YANDEX_WIKI_ORG_ID }}
+          YANDEX_WIKI_TEST_SLUG: ${{ vars.YANDEX_WIKI_TEST_SLUG || secrets.YANDEX_WIKI_TEST_SLUG }}
+          YC_IAM_TOKEN: ${{ secrets.YC_IAM_TOKEN }}
+          YC_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.YC_SERVICE_ACCOUNT_KEY_JSON }}
+          YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID || secrets.YC_FOLDER_ID }}
+          YC_MONITORING_API_KEY: ${{ secrets.YC_MONITORING_API_KEY }}
+          YC_AI_API_KEY: ${{ secrets.YC_AI_API_KEY }}
+          YC_SPEECHKIT_API_KEY: ${{ secrets.YC_SPEECHKIT_API_KEY }}
+          YC_VISION_API_KEY: ${{ secrets.YC_VISION_API_KEY }}
+          YANDEX_MAPS_API_KEY: ${{ secrets.YANDEX_MAPS_API_KEY }}
+          PULSE_ENABLE_BILLABLE_PROBES: ${{ vars.PULSE_ENABLE_BILLABLE_PROBES }}
         run: python monitor/check.py
       - name: Save rolling results (no secrets or account data)
         run: |

@@ -188,13 +188,19 @@ def run() -> dict:
             except Exception as exc:
                 results[item["id"]] = result(item, "down", reason=type(exc).__name__)
 
+    try:
+        from monitor.auth_checks import perform as auth_probe
+    except ImportError:
+        from auth_checks import perform as auth_probe
+
     for item in checks:
         if item["id"] in results:
             continue
+        previous_result = old_results.get(item["id"], {})
         if item["kind"] == "requires_key":
-            results[item["id"]] = result(item, "not_configured", reason="Нужен API-ключ и сценарий проверки")
+            results[item["id"]] = auth_probe(item, previous_result)
         else:
-            results[item["id"]] = optional_music_probe(item, token, old_results.get(item["id"], {}))
+            results[item["id"]] = optional_music_probe(item, token, previous_result)
 
     ordered = [results[item["id"]] for item in checks]
     now = utc_now()
