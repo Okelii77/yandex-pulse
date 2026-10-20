@@ -1,1 +1,2 @@
 yandex-music[ynison]>=3.2.2,<4
+Pillow>=10.4,<13
