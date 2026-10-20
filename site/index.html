@@ -10,7 +10,7 @@
   <link rel="icon" href="./favicon-32-v2.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon-v2.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=graph3">
+  <link rel="stylesheet" href="./styles.css?v=refresh2">
   <title>Yandex Pulse — мониторинг экосистемы</title>
 </head>
 <body>
@@ -39,7 +39,7 @@
           <div class="topbar-check" id="topbar-check"><span class="status-ping"></span> Ожидание данных</div>
           <span class="topbar-divider" aria-hidden="true"></span>
           <button class="icon-button" id="theme-toggle" title="Сменить тему" aria-label="Сменить тему">☼</button>
-          <button class="icon-button refresh-button" id="refresh-button" title="Обновить отображение" aria-label="Обновить данные">↻</button>
+          <button class="icon-button refresh-button" id="refresh-button" title="Проверить, опубликованы ли новые данные (не запускает проверку сервисов)" aria-label="Получить последние опубликованные данные">↻</button>
           <a class="github-button" href="https://github.com/Okelii77/yandex-pulse" target="_blank" rel="noreferrer noopener" aria-label="GitHub репозиторий">GitHub ↗</a>
         </div>
       </header>
@@ -47,7 +47,15 @@
       <main class="content">
         <div class="page-meta">
           <div class="eyebrow"><span class="eyebrow-line"></span> СИСТЕМНАЯ ПАНЕЛЬ <span class="meta-bullet">●</span> ОБНОВЛЕНИЕ ПО РАСПИСАНИЮ</div>
-          <div id="last-updated" class="last-updated">Нет данных о последней проверке</div>
+          <div class="probe-meta">
+            <div id="last-updated" class="last-updated">Нет данных о последней проверке</div>
+            <a class="manual-run-link"
+               href="https://github.com/Okelii77/yandex-pulse/actions/workflows/pulse.yml"
+               target="_blank" rel="noopener noreferrer"
+               title="Откроется GitHub Actions: войдите в аккаунт и нажмите Run workflow">
+              Запуск через GitHub <span aria-hidden="true">↗</span>
+            </a>
+          </div>
         </div>
 
         <section class="hero" aria-labelledby="hero-title">
@@ -132,6 +140,6 @@
     </section>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="./app.js?v=graph3" defer></script>
+  <script src="./app.js?v=refresh2" defer></script>
 </body>
 </html>
