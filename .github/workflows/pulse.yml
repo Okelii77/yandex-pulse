@@ -9,6 +9,12 @@ on:
   schedule:
     - cron: '13,43 * * * *'
   workflow_dispatch:
+    inputs:
+      publish_site:
+        description: 'Republish website after frontend changes'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -45,6 +51,10 @@ jobs:
           node monitor/test_graph.cjs
           node --check site/live-api.js
           node --test worker/test/*.test.mjs
+      - name: Restore cooldown from Cloudflare D1
+        env:
+          PULSE_API_URL: https://yandex-pulse-api.oleg-pulse-03.workers.dev
+        run: python monitor/load_previous.py
       - name: Check Yandex endpoints
         env:
           YANDEX_MUSIC_TOKEN: ${{ secrets.YANDEX_MUSIC_TOKEN }}
@@ -62,16 +72,17 @@ jobs:
           YANDEX_MAPS_API_KEY: ${{ secrets.YANDEX_MAPS_API_KEY }}
           PULSE_ENABLE_BILLABLE_PROBES: ${{ vars.PULSE_ENABLE_BILLABLE_PROBES }}
         run: python monitor/check.py
-      - name: Save rolling results (no secrets or account data)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add site/status.json site/history.json site/apple-touch-icon-v2.png site/icon-192-v2.png site/icon-512-v2.png site/favicon-32-v2.png
-          if ! git diff --cached --quiet; then
-            git commit -m "data: refresh synthetic probes [skip ci]"
-            git push
-          fi
+      - name: Upload results directly to D1 via GitHub OIDC
+        env:
+          PULSE_API_URL: https://yandex-pulse-api.oleg-pulse-03.workers.dev
+        run: python monitor/upload_live.py
+      - name: Configure public frontend API
+        if: github.event_name == 'push' || inputs.publish_site == true
+        env:
+          PULSE_API_URL: https://yandex-pulse-api.oleg-pulse-03.workers.dev
+        run: python monitor/build_site_config.py
       - name: Upload site
+        if: github.event_name == 'push' || inputs.publish_site == true
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
@@ -79,6 +90,7 @@ jobs:
   deploy:
     name: Publish Pages
     needs: probe
+    if: github.event_name == 'push' || inputs.publish_site == true
     runs-on: ubuntu-latest
     environment:
       name: github-pages
