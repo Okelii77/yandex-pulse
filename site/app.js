@@ -459,6 +459,14 @@
     window.addEventListener("hashchange",onHash);
     render();
     onHash();
+    if(window.PulseLive?.refreshCapabilities()){
+      window.PulseLive.refreshCapabilities().then(ready=>{
+        if(ready){
+          $("#refresh-button").title="Запустить диагностику сейчас";
+          $("#refresh-button").setAttribute("aria-label","Запустить диагностику сейчас");
+        }
+      });
+    }
     reload(true);
     setInterval(()=>reload(true),60000);
     setInterval(renderHero,30000);

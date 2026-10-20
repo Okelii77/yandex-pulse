@@ -5,6 +5,12 @@
   const base=String(settings.apiUrl || "").trim().replace(/\/+$/, "");
   const key=String(settings.turnstileSiteKey || "").trim();
   const enabled=() => /^https:\/\/[a-z0-9.-]+$/i.test(base);
+  let triggerReady=false;
+  async function refreshCapabilities(){
+    if(!enabled()||!key)return false;
+    try{const status=await read("/api/health");triggerReady=status.trigger_ready===true;}catch{triggerReady=false;}
+    return triggerReady;
+  }
 
   async function read(path) {
     const r=await fetch(base+path,{headers:{Accept:"application/json"},cache:"no-store"});
@@ -105,5 +111,5 @@
       state.textContent="Cloudflare Turnstile сейчас недоступен.";
     }
   }
-  window.PulseLive={enabled,canTrigger:()=>enabled()&&!!key,snapshot,trigger};
+  window.PulseLive={enabled,canTrigger:()=>enabled()&&!!key&&triggerReady,refreshCapabilities,snapshot,trigger};
 })();

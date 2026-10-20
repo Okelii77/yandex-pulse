@@ -80,6 +80,7 @@ jobs:
         if: github.event_name == 'push' || inputs.publish_site == true
         env:
           PULSE_API_URL: https://yandex-pulse-api.oleg-pulse-03.workers.dev
+          PULSE_TURNSTILE_SITE_KEY: 0x4AAAAAAFeL0-z-eWNZ-Aai
         run: python monitor/build_site_config.py
       - name: Upload site
         if: github.event_name == 'push' || inputs.publish_site == true

@@ -1,6 +1,40 @@
 # Yandex Pulse API · Cloudflare Workers + D1
 
-**Status:** source code is prepared but the Worker is **not deployed** until the repository owner creates a Cloudflare account, D1 database, and binds secrets. The existing GitHub Pages/Actions monitoring remains active until cutover.
+**Развёрнуто:** Worker `yandex-pulse-api` и D1 `yandex-pulse` уже созданы в Cloudflare.
+
+- Worker API: https://yandex-pulse-api.oleg-pulse-03.workers.dev
+- Доступность: GET `/api/health`; статусы: GET `/api/status`; история: GET `/api/history`.
+- Автоматическая передача из GitHub Actions через подписанный **OIDC** JWT (без постоянного секрета).
+- История из первоначальных JSON перенесена в D1. Проверки не создают новые коммиты и не деплоят Pages.
+- **Ручной запуск ещё не включён**, пока владелец не сохранит в Worker Secrets два ключа: `TURNSTILE_SECRET` и `GITHUB_ACTIONS_TOKEN`.
+
+## Завершить кнопку «Проверить сейчас»
+
+### 1. Cloudflare Turnstile Secret
+
+В Dashboard → Turnstile → **Yandex Pulse manual diagnostics** (виджет уже создан для `okelii77.github.io`) скопируйте **Secret key**. Добавьте в Worker `yandex-pulse-api` → Settings → Variables and Secrets новую секретную переменную:
+
+```text
+TURNSTILE_SECRET
+```
+
+Значение — Secret key Turnstile. **Не путать с sitekey**, который уже опубликован в JS; sitekey специально является публичным.
+
+### 2. Ограниченный GitHub API токен
+
+Создайте **Fine-grained personal access token**: https://github.com/settings/personal-access-tokens/new
+
+Выберите **Only select repositories → Okelii77/yandex-pulse**. Назначьте разрешение **Actions: Read and write** (остальные минимум: только обязательные метаданные), а срок действия — например 30–90 дней. Запишите дату окончания для дальнейшего продления.
+
+Скопируйте токен только в секрет Worker `yandex-pulse-api`:
+
+```text
+GITHUB_ACTIONS_TOKEN
+```
+
+В ChatGPT или публичный репозиторий токен не отправляйте.
+
+После сохранения двух секретов Worker автоматически начнёт отвечать `trigger_ready:true` в `GET /api/health`. Сайт проверяет это свойство и активирует кнопку запуска прямо в интерфейсе. При нажатии Turnstile проверяет пользователя, глобальное ограничение не разрешает новые запуски чаще одного раза в 10 минут.
 
 ## What the architecture does
 

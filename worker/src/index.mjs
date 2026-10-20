@@ -232,7 +232,7 @@ export default {
       }
       if(!env.DB)return json({error:"database_not_bound"},503,cors);
       if(url.pathname==="/api/health" && request.method==="GET")
-        return json({ok:true,service:"yandex-pulse-api",version:1},200,cors);
+        return json({ok:true,service:"yandex-pulse-api",version:2,trigger_ready:Boolean(env.TURNSTILE_SECRET && env.GITHUB_ACTIONS_TOKEN)},200,cors);
       if(url.pathname==="/api/status" && request.method==="GET") {
         const data=await latest(env);
         return data ? json(data,200,cors) : json({error:"waiting_for_first_probe"},503,cors);
