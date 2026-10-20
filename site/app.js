@@ -33,7 +33,7 @@
     ["other","Другие сервисы","layers"]
   ].map(([id,title,icon]) => ({id,title,icon,description:"Проверки сервиса"}));
 
-  const state = {data:null, history:null, category:"overview", filter:"all", query:"", modal:null, range:24, loading:false};
+  const state = {data:null, history:null, category:"overview", filter:"all", query:"", modal:null, range:24, loading:false, source:"legacy"};
   const icon = key => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (PATHS[key] || PATHS.layers) + '</svg>';
   const esc = x => String(x == null ? "" : x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
   const cats = () => state.data?.categories || FALLBACK_CATEGORIES;
@@ -84,6 +84,11 @@
     if (current) $("#category-intro").innerHTML = '<div><b>'+esc(current.title)+'</b><p>'+esc(current.description)+'</p></div><strong>'+checks().filter(x=>x.category===current.id).length+' проверок</strong>';
     $("#last-updated").textContent = state.data?.generated_at ? 'Последняя проверка: '+fmtDate(state.data.generated_at) : 'Данных о последней проверке пока нет';
     const check = $("#topbar-check"), dot = $(".status-ping",check);
+    if (state.source === "archive" && window.PulseLive?.enabled()) {
+      check.lastChild.textContent = " API недоступен · архив";
+      dot.className = "status-ping is-error";
+      return;
+    }
     if (!state.data) {
       check.lastChild.textContent = " Ожидание данных";
       dot.className = "status-ping";
@@ -348,16 +353,33 @@
     button.disabled=true;
     button.setAttribute("aria-busy","true");
     try {
-      // This only reads GitHub Pages snapshots; NO new API probe runs here.
-      const [data,history]=await Promise.all([fetchJson("./status.json"),fetchJson("./history.json")]);
-      if (!data || !Array.isArray(data.results) || !Array.isArray(data.checks)) throw Error("Неверный формат статуса");
+      let data,history;
+      if(window.PulseLive?.enabled()){
+        try{
+          const live=await window.PulseLive.snapshot();
+          data=live.status;
+          history=live.history;
+          state.source="live";
+        }catch(e){
+          [data,history]=await Promise.all([fetchJson("./status.json"),fetchJson("./history.json")]);
+          state.source="archive";
+        }
+      }else{
+        [data,history]=await Promise.all([fetchJson("./status.json"),fetchJson("./history.json")]);
+        state.source="legacy";
+      }
+      if (!data || !Array.isArray(data.results) || !Array.isArray(data.checks))
+        throw Error("Неверный формат статуса");
       state.data=data;
       state.history=history;
       render();
       if (state.modal) renderModal();
-      if (!silent) notify(refreshMessage(previousTimestamp,data.generated_at));
+      if(!silent) {
+        if(state.source==="archive")notify("Live API временно недоступен. Показан архивный снимок.");
+        else notify(refreshMessage(previousTimestamp,data.generated_at));
+      }
     } catch(error) {
-      if (!silent) notify("Не удалось получить отчёт. Проверь подключение и GitHub Actions.");
+      if (!silent) notify("Не удалось загрузить данные. Проверь GitHub Actions.");
       if (!state.data) render();
       if (!silent) console.warn("Yandex Pulse: publication unavailable",error.message);
     } finally {
@@ -365,6 +387,21 @@
       button.disabled=false;
       button.removeAttribute("aria-busy");
     }
+  }
+  function waitForNewProbe(previous) {
+    let count=0;
+    const timer=setInterval(async()=>{
+      count++;
+      await reload(true);
+      const next=state.data?.generated_at;
+      if(next && (!previous || Date.parse(next)>Date.parse(previous)) && state.source==="live"){
+        clearInterval(timer);
+        notify("Диагностика завершена · "+fmtDate(next));
+      }else if(count>=28){
+        clearInterval(timer);
+        notify("Проверка запущена. Результат появится после завершения GitHub Actions.");
+      }
+    },8000);
   }
   function onHash() {
     const key=decodeURIComponent(location.hash.replace(/^#\/?/,"")).split("/")[0];
@@ -386,7 +423,19 @@
       setTheme(saved==="dark"||saved==="light"?saved:(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"));
     } catch(_) {setTheme("dark");}
     $("#theme-toggle").addEventListener("click",()=>setTheme(document.documentElement.dataset.theme==="dark"?"light":"dark"));
-    $("#refresh-button").addEventListener("click",()=>reload());
+    if (window.PulseLive?.canTrigger()) {
+      $("#refresh-button").title = "Запустить новую проверку сервисов";
+      $("#refresh-button").setAttribute("aria-label","Запустить диагностику сейчас");
+    }
+    $("#refresh-button").addEventListener("click",()=>{
+      if (window.PulseLive?.canTrigger()) {
+        const original=state.data?.generated_at;
+        window.PulseLive.trigger({
+          onMessage:notify,
+          onStarted:()=>waitForNewProbe(original)
+        });
+      }else reload(false);
+    });
     $("#search").addEventListener("input",e=>{state.query=e.target.value;renderChecks();});
     $("#status-filters").addEventListener("click",e=>{
       const btn=e.target.closest("[data-filter]");

@@ -263,3 +263,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,[tabindex]:focus-visibl
  .modal-inner{padding:28px 20px 30px}.modal-heading{font-size:25px}.detail-stat{padding:13px 12px}.detail-stat strong{font-size:12px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* Cloudflare Turnstile confirmation for on-demand probe runs. */
+.pulse-trigger-backdrop{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(9px)}
+.pulse-trigger-backdrop[hidden]{display:none}
+.pulse-trigger-panel{width:min(430px,100%);padding:32px;border:1px solid var(--border);border-radius:22px;background:var(--surface);box-shadow:var(--shadow);position:relative}
+.pulse-trigger-panel h2{font-size:26px;letter-spacing:-.8px;margin:15px 0 11px}
+.pulse-trigger-panel p{color:var(--muted);font-size:12px;line-height:1.75}
+.pulse-trigger-panel .pulse-trigger-state{margin-top:20px;min-height:20px;font-size:11px}
+.pulse-trigger-panel .pulse-trigger-close{position:absolute;top:16px;right:16px;border:0;background:var(--surface3);color:var(--text);width:38px;height:38px;border-radius:11px;font-size:23px}
+#pulse-turnstile-container{margin-top:23px;max-width:100%}
