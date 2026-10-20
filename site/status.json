@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated_at": "2026-10-20T16:55:09Z",
+  "generated_at": "2026-10-20T16:56:14Z",
   "interval_minutes": 30,
   "scope": "Synthetic probes from GitHub Actions; NOT official Yandex service status.",
   "categories": [
@@ -333,239 +333,239 @@
     {
       "id": "music-web",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:05Z",
-      "latency_ms": 743,
+      "checked_at": "2026-10-20T16:56:09Z",
+      "latency_ms": 1170,
       "http_code": 200
     },
     {
       "id": "music-catalog",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:05Z",
-      "latency_ms": 833,
+      "checked_at": "2026-10-20T16:56:09Z",
+      "latency_ms": 1425,
       "http_code": 200
     },
     {
       "id": "music-rest",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "YANDEX_MUSIC_TOKEN не задан"
     },
     {
       "id": "music-ynison",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "YANDEX_MUSIC_TOKEN не задан"
     },
     {
       "id": "music-history",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "YANDEX_MUSIC_TOKEN не задан"
     },
     {
       "id": "music-queues",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "YANDEX_MUSIC_TOKEN не задан"
     },
     {
       "id": "cloud-web",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:06Z",
-      "latency_ms": 1169,
+      "checked_at": "2026-10-20T16:56:09Z",
+      "latency_ms": 1703,
       "http_code": 200
     },
     {
       "id": "cloud-console",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:06Z",
-      "latency_ms": 1831,
+      "checked_at": "2026-10-20T16:56:10Z",
+      "latency_ms": 2769,
       "http_code": 200
     },
     {
       "id": "cloud-storage",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:05Z",
-      "latency_ms": 604,
+      "checked_at": "2026-10-20T16:56:08Z",
+      "latency_ms": 840,
       "http_code": 200
     },
     {
       "id": "cloud-iam",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "Нужен API-ключ и сценарий проверки"
     },
     {
       "id": "cloud-monitoring",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "Нужен API-ключ и сценарий проверки"
     },
     {
       "id": "mail-web",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:06Z",
-      "latency_ms": 1264,
+      "checked_at": "2026-10-20T16:56:09Z",
+      "latency_ms": 1606,
       "http_code": 200
     },
     {
       "id": "mail-imap",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:05Z",
-      "latency_ms": 497,
+      "checked_at": "2026-10-20T16:56:08Z",
+      "latency_ms": 587,
       "transport": "tls"
     },
     {
       "id": "mail-smtp",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:05Z",
-      "latency_ms": 681,
+      "checked_at": "2026-10-20T16:56:08Z",
+      "latency_ms": 731,
       "transport": "tls"
     },
     {
       "id": "mail-360",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:07Z",
-      "latency_ms": 1614,
+      "checked_at": "2026-10-20T16:56:09Z",
+      "latency_ms": 974,
       "http_code": 200
     },
     {
       "id": "disk-web",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:07Z",
-      "latency_ms": 1861,
+      "checked_at": "2026-10-20T16:56:11Z",
+      "latency_ms": 2568,
       "http_code": 200
     },
     {
       "id": "disk-api",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "Нужен API-ключ и сценарий проверки"
     },
     {
       "id": "id-passport",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:07Z",
-      "latency_ms": 1769,
+      "checked_at": "2026-10-20T16:56:11Z",
+      "latency_ms": 2494,
       "http_code": 200
     },
     {
       "id": "id-oauth",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:06Z",
-      "latency_ms": 1010,
+      "checked_at": "2026-10-20T16:56:10Z",
+      "latency_ms": 1687,
       "http_code": 200
     },
     {
       "id": "wiki-web",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:06Z",
-      "latency_ms": 843,
+      "checked_at": "2026-10-20T16:56:11Z",
+      "latency_ms": 1620,
       "http_code": 200
     },
     {
       "id": "wiki-api",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "Нужен API-ключ и сценарий проверки"
     },
     {
       "id": "maps-web",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:07Z",
-      "latency_ms": 1183,
+      "checked_at": "2026-10-20T16:56:11Z",
+      "latency_ms": 1600,
       "http_code": 200
     },
     {
       "id": "maps-geocoder",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "Нужен API-ключ и сценарий проверки"
     },
     {
       "id": "search-web",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:07Z",
-      "latency_ms": 1004,
+      "checked_at": "2026-10-20T16:56:11Z",
+      "latency_ms": 1568,
       "http_code": 200
     },
     {
       "id": "search-webmaster",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:07Z",
-      "latency_ms": 1334,
+      "checked_at": "2026-10-20T16:56:11Z",
+      "latency_ms": 1816,
       "http_code": 200
     },
     {
       "id": "ai-studio",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:07Z",
-      "latency_ms": 1225,
+      "checked_at": "2026-10-20T16:56:12Z",
+      "latency_ms": 1580,
       "http_code": 200
     },
     {
       "id": "ai-models",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "Нужен API-ключ и сценарий проверки"
     },
     {
       "id": "ai-speech",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "Нужен API-ключ и сценарий проверки"
     },
     {
       "id": "ai-vision",
       "status": "not_configured",
-      "checked_at": "2026-10-20T16:55:09Z",
+      "checked_at": "2026-10-20T16:56:14Z",
       "latency_ms": null,
       "reason": "Нужен API-ключ и сценарий проверки"
     },
     {
       "id": "other-telemost",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:07Z",
-      "latency_ms": 667,
+      "checked_at": "2026-10-20T16:56:12Z",
+      "latency_ms": 1047,
       "http_code": 200
     },
     {
       "id": "other-metrika",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:09Z",
-      "latency_ms": 2033,
+      "checked_at": "2026-10-20T16:56:14Z",
+      "latency_ms": 2862,
       "http_code": 200
     },
     {
       "id": "other-tracker",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:08Z",
-      "latency_ms": 1180,
+      "checked_at": "2026-10-20T16:56:12Z",
+      "latency_ms": 1651,
       "http_code": 200
     },
     {
       "id": "other-market",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:08Z",
-      "latency_ms": 911,
+      "checked_at": "2026-10-20T16:56:12Z",
+      "latency_ms": 905,
       "http_code": 200
     },
     {
       "id": "other-weather",
       "status": "ok",
-      "checked_at": "2026-10-20T16:55:09Z",
-      "latency_ms": 2025,
+      "checked_at": "2026-10-20T16:56:13Z",
+      "latency_ms": 2260,
       "http_code": 200
     }
   ]
