@@ -179,66 +179,62 @@
     $("#footer-time").textContent="Все времена — в часовом поясе устройства";
   }
 
-  // Render against real timestamps. The X axis ALWAYS spans the selected
-  // 24h / 7d / 30d window, even if observations exist for just one hour.
+  // The chart spreads AVAILABLE readings across the width (sequence of checks),
+  // while the selected range still filters by their real timestamps.
+  // This prevents a new monitor's first few readings being squeezed into 2 pixels.
   function plot(points, hours, intervalMinutes=30) {
-    const end=Date.now(),start=end-hours*3600000;
-    const measured=points.filter(p=>Number.isFinite(p[2])&&Number.isFinite(new Date(p[0]).getTime()))
-      .map(p=>({t:new Date(p[0]).getTime(),value:p[2],state:p[1],date:p[0]}))
-      .filter(p=>p.t>=start&&p.t<=end).sort((a,b)=>a.t-b.t);
-    const vals=measured.map(p=>p.value);
+    const readings=points
+      .filter(p=>Number.isFinite(p[2])&&Number.isFinite(new Date(p[0]).getTime()))
+      .map(p=>({date:p[0],time:new Date(p[0]).getTime(),value:p[2],status:p[1]}))
+      .sort((a,b)=>a.time-b.time);
+    const vals=readings.map(p=>p.value);
     const peak=Math.max(100,...vals);
-    const scale=Math.pow(10,Math.floor(Math.log10(peak/3)));
-    const normalized=peak/3/scale;
-    const tickStep=(normalized<=1?1:normalized<=2?2:normalized<=5?5:10)*scale;
+    const roughStep=peak/4;
+    const factor=Math.pow(10,Math.floor(Math.log10(roughStep)));
+    const tickStep=(roughStep/factor<=1?1:roughStep/factor<=2?2:roughStep/factor<=5?5:10)*factor;
     const ceiling=Math.ceil(peak/tickStep)*tickStep;
     const ticksY=[ceiling,ceiling*.75,ceiling*.5,ceiling*.25,0];
-    const W=1000,H=180;
-    const dx=p=>(p.t-start)/(end-start)*W;
-    const dy=p=>H-p.value/ceiling*H;
-    const lines=[];
-    const lineGaps=Math.max(75,intervalMinutes*2.5)*60000;
-    let segment=[];
-    const makeLine=()=>{
-      if (!segment.length) return;
-      const path=segment.map((p,i)=>(i?'L':'M')+dx(p).toFixed(3)+' '+dy(p).toFixed(3)).join(' ');
-      const first=segment[0], last=segment[segment.length-1];
-      const area=path+' L'+dx(last).toFixed(3)+' '+H+' L'+dx(first).toFixed(3)+' '+H+' Z';
-      lines.push('<path d="'+area+'" fill="url(#pulse-chart-fill)"/>'+
-        '<path d="'+path+'" stroke="var(--accent)" stroke-width="2.5" vector-effect="non-scaling-stroke" fill="none" stroke-linecap="round" stroke-linejoin="round"/>');
-      segment=[];
-    };
-    for (const point of measured){
-      if(segment.length&&point.t-segment[segment.length-1].t>lineGaps)makeLine();
-      segment.push(point);
-    }
-    makeLine();
+    const W=1000,H=180,padding=8;
+    const x=i=>readings.length<2 ? W/2 : padding+(W-2*padding)*i/(readings.length-1);
+    const y=v=>H-Math.max(0,v)/ceiling*H;
+    const path=readings.map((p,i)=>(i?"L":"M")+x(i).toFixed(2)+" "+y(p.value).toFixed(2)).join(" ");
+    const area=readings.length>1?path+" L"+x(readings.length-1).toFixed(2)+" "+H+
+      " L"+x(0).toFixed(2)+" "+H+" Z":"";
     const grid=[0,.25,.5,.75,1].map(f=>{
-      const y=(f*H).toFixed(1);
-      return '<line x1="0" x2="'+W+'" y1="'+y+'" y2="'+y+
+      const gy=(f*H).toFixed(1);
+      return '<line x1="0" x2="'+W+'" y1="'+gy+'" y2="'+gy+
         '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke" stroke-dasharray="4 6"/>';
-    }).join('');
-    const pointsSvg=measured.map((p,i)=>
-      '<circle class="chart-dot '+esc(p.state)+'" cx="'+dx(p).toFixed(3)+'" cy="'+dy(p).toFixed(3)+
-      '" r="5" vector-effect="non-scaling-stroke" data-datapoint="'+i+'"><title>'+
-      esc(fmtDate(p.date))+' — '+Math.round(p.value)+' мс ('+esc(STATES[p.state]?.[0]||p.state)+')</title></circle>').join('');
-    const numberOfXTicks=window.matchMedia('(max-width: 480px)').matches?4:6;
-    const xLabels=Array.from({length:numberOfXTicks+1},(_,i)=>{
-      const time=new Date(start+(end-start)*i/numberOfXTicks);
-      return '<span>'+esc(new Intl.DateTimeFormat("ru-RU",hours===24?
-        {hour:"2-digit",minute:"2-digit"}:{day:"2-digit",month:"short"}).format(time))+'</span>';
-    }).join('');
-    const readout=measured.length?
-      'Последний замер: '+fmtDate(measured[measured.length-1].date)+' · '+Math.round(measured[measured.length-1].value)+' мс'
-      : 'Нет измерений времени ответа в этом периоде';
-    return '<div class="chart-header"><span>Y · Время ответа, мс</span><span>X · Местное время</span></div>'+
+    }).join("");
+    // Keep the graph uncluttered as the history grows. Individual sample info
+    // remains available by touching/clicking anywhere on the chart.
+    const visibleDots=readings.length<=30?readings.map((p,i)=>
+      '<circle class="chart-dot '+esc(p.status)+'" cx="'+x(i).toFixed(2)+'" cy="'+y(p.value).toFixed(2)+
+      '" r="2.25" data-datapoint="'+i+'"><title>'+esc(fmtDate(p.date))+" — "+Math.round(p.value)+
+      ' мс ('+esc(STATES[p.status]?.[0]||p.status)+')</title></circle>').join(""):"";
+    const wanted=window.matchMedia("(max-width: 480px)").matches?3:5;
+    const count=Math.min(wanted,readings.length);
+    const format=new Intl.DateTimeFormat("ru-RU",hours===24?
+      {hour:"2-digit",minute:"2-digit"}:
+      {day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+    const sampleIndexes=count===1?[0]:Array.from({length:count},(_,i)=>
+      Math.round(i*(readings.length-1)/(count-1)));
+    const xLabels=sampleIndexes.map(i=>'<span>'+esc(format.format(new Date(readings[i].date)))+'</span>').join("");
+    const readout=readings.length?
+      "Последний замер: "+fmtDate(readings[readings.length-1].date)+" · "+Math.round(readings[readings.length-1].value)+" мс"
+      :"Нет измерений времени ответа в этом периоде";
+    return '<div class="chart-header"><span>Y · Время ответа, мс</span><span>X · Проверки по времени</span></div>'+
       '<div class="chart-plot-layout">'+
-      '<div class="chart-y-axis" aria-hidden="true">'+ticksY.map(n=>'<span>'+esc(Math.round(n).toLocaleString("ru-RU"))+'</span>').join('')+'</div>'+
-      '<div class="chart-plot" data-start="'+start+'" data-end="'+end+'" data-span="'+W+'">'+
-      '<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="Ось X — время; ось Y — время ответа в миллисекундах. Нажмите график, чтобы увидеть отдельное измерение">'+
-      '<defs><linearGradient id="pulse-chart-fill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="var(--accent)" stop-opacity=".24"/>'+
-      '<stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>'+grid+lines.join('')+pointsSvg+'</svg>'+
-      (!measured.length?'<span class="chart-no-points">Данных пока нет</span>':'')+
+      '<div class="chart-y-axis" aria-hidden="true">'+ticksY.map(n=>'<span>'+
+      esc(Math.round(n).toLocaleString("ru-RU"))+'</span>').join("")+'</div>'+
+      '<div class="chart-plot" data-points="'+readings.length+'" data-padding="'+padding+'" data-width="'+W+'">'+
+      '<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="Ось X — последовательность проверок по времени, ось Y — время ответа в миллисекундах. Нажмите для данных точки">'+
+      '<defs><linearGradient id="pulse-chart-fill" x1="0" x2="0" y1="0" y2="1">'+
+      '<stop stop-color="var(--accent)" stop-opacity=".20"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>'+
+      grid+
+      (area?'<path d="'+area+'" fill="url(#pulse-chart-fill)"/>':"")+
+      (path?'<path d="'+path+'" stroke="var(--accent)" stroke-width="2.5" vector-effect="non-scaling-stroke" fill="none" stroke-linecap="round" stroke-linejoin="round"/>':"")+
+      visibleDots+'</svg>'+
+      (!readings.length?'<span class="chart-no-points">Данных пока нет</span>':"")+
       '</div></div>'+
       '<div class="chart-x-axis">'+xLabels+'</div>'+
       '<div class="chart-readout" id="chart-readout" aria-live="polite">'+esc(readout)+'</div>';
@@ -246,23 +242,28 @@
   function showChartPoint(event) {
     const plotNode=event.target.closest(".chart-plot");
     if(!plotNode||!state.modal)return;
-    const observed=hist(state.modal,state.range).filter(p=>Number.isFinite(p[2]));
+    const observed=hist(state.modal,state.range).filter(p=>Number.isFinite(p[2]))
+      .sort((a,b)=>new Date(a[0])-new Date(b[0]));
     if(!observed.length)return;
     const rect=plotNode.getBoundingClientRect();
     if(!rect.width)return;
     const fraction=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
-    const time=Number(plotNode.dataset.start)+fraction*(Number(plotNode.dataset.end)-Number(plotNode.dataset.start));
-    const nearest=observed.reduce((best,p)=>Math.abs(new Date(p[0]).getTime()-time)<Math.abs(new Date(best[0]).getTime()-time)?p:best);
+    const px=fraction*Number(plotNode.dataset.width);
+    const pad=Number(plotNode.dataset.padding);
+    const index=observed.length===1?0:
+      Math.max(0,Math.min(observed.length-1,
+        Math.round((px-pad)/(Number(plotNode.dataset.width)-2*pad)*(observed.length-1))));
+    const sample=observed[index];
     const output=$("#chart-readout");
     if(output){
-      output.textContent=fmtDate(nearest[0])+" · "+Math.round(nearest[2])+" мс · "+(STATES[nearest[1]]?.[0]||nearest[1]);
+      output.textContent=fmtDate(sample[0])+" · "+Math.round(sample[2])+" мс · "+
+        (STATES[sample[1]]?.[0]||sample[1]);
       output.classList.add("selected");
     }
     const svg=$(".chart-svg",plotNode);
     if(svg){
-      const dots=$(".chart-dot",svg);
-      const index=observed.findIndex(p=>p[0]===nearest[0]);
-      dots.forEach((dot,i)=>dot.classList.toggle("selected",i===index));
+      $$(".chart-dot",svg).forEach(dot=>
+        dot.classList.toggle("selected",Number(dot.dataset.datapoint)===index));
     }
   }
   function showModal(id) {
@@ -306,7 +307,7 @@
         '<button class="range-btn'+(state.range===r[0]?" active":"")+'" data-range="'+r[0]+'">'+r[1]+'</button>').join("")+'</div>'+
       '<div class="history-chart">'+plot(points,state.range,state.data?.interval_minutes||30)+'</div>'+
       '<div class="graph-meta"><span>Измерений: '+points.length+'</span><span>Успешных: '+success+'</span></div>'+
-      '<div class="chart-coverage">'+(points.length ? 'История наблюдений доступна с '+fmtDate(points[0][0])+'. Если за часть выбранного периода нет точек — в это время данные ещё не собирались или проверки не выполнялись.' : 'Нет измерений за выбранный период. Это не означает недоступность сервиса.')+'</div>'+
+      '<div class="chart-coverage">'+(points.length ? 'Измерения накоплены с '+fmtDate(points[0][0])+'. График равномерно распределяет имеющиеся проверки по ширине, даже если вся история занимает лишь несколько часов. Даты под графиком показывают реальные моменты запросов.' : 'Нет измерений за выбранный период. Это не означает недоступность сервиса.')+'</div>'+
       '<div class="detail-grid">'+stat("Последний отклик",fmtMs(result.latency_ms))+
       stat("Средний отклик за период",fmtMs(average))+
       extra.map(v=>stat(v[0],v[1])).join("")+

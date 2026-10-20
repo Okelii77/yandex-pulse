@@ -200,12 +200,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,[tabindex]:focus-visibl
 .chart-y-axis{position:absolute;left:0;top:0;bottom:0;width:41px;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;transform:translateY(-5px);color:var(--subtle);font-size:10px;font-variant-numeric:tabular-nums}
 .chart-plot{height:180px;position:relative;min-width:0;touch-action:pan-y;cursor:crosshair;user-select:none}
 .chart-svg{display:block;width:100%;height:100%;overflow:hidden}
-.chart-dot{fill:var(--accent);stroke:var(--surface2);stroke-width:2px;paint-order:stroke;cursor:crosshair}
+.chart-dot{fill:var(--accent);stroke:var(--surface2);stroke-width:.8px;paint-order:stroke;cursor:crosshair}
 .chart-dot.down{fill:var(--red)}
 .chart-dot.degraded,.chart-dot.no_data{fill:var(--amber)}
-.chart-dot.selected{stroke:var(--text);stroke-width:3px}
+.chart-dot.selected{fill:var(--text);stroke:var(--accent);stroke-width:2px}
 .chart-no-points{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;color:var(--muted);white-space:nowrap;pointer-events:none}
-.chart-x-axis{margin:11px 0 0 49px;display:flex;justify-content:space-between;gap:4px;color:var(--subtle);font-size:9px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.chart-x-axis{margin:11px 0 0 49px;display:flex;justify-content:space-between;gap:4px;color:var(--subtle);font-size:9px;white-space:normal;font-variant-numeric:tabular-nums}.chart-x-axis span{min-width:0;line-height:1.45;text-align:center}.chart-x-axis span:first-child{text-align:left}.chart-x-axis span:last-child{text-align:right}
 .chart-readout{min-height:18px;border-top:1px solid var(--border);margin-top:15px;padding-top:11px;color:var(--muted);font-size:10px;line-height:1.5;font-variant-numeric:tabular-nums}
 .chart-readout.selected{color:var(--text);font-weight:750}
 .chart-coverage{margin:4px 0 18px;color:var(--muted);font-size:10px;line-height:1.7;background:var(--accent-soft);padding:11px 12px;border-left:2px solid var(--accent);border-radius:5px}
