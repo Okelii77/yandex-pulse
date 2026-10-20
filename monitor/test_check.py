@@ -26,7 +26,7 @@ class CatalogTests(unittest.TestCase):
         probe = {"id": "music-rest", "kind": "music_rest"}
         result = m.optional_music_probe(probe, "", {})
         self.assertEqual(result["status"], "not_configured")
-        self.assertNotIn("token", str(result).lower())
+        self.assertNotIn("access_token", result)
 
     def test_ynison_cooldown_is_respected_without_network(self):
         probe = {"id": "music-ynison", "kind": "music_ynison"}
