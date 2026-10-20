@@ -1,0 +1,572 @@
+{
+  "schema": 1,
+  "generated_at": "2026-10-20T16:35:52Z",
+  "interval_minutes": 30,
+  "scope": "Synthetic probes from GitHub Actions; NOT official Yandex service status.",
+  "categories": [
+    {
+      "id": "music",
+      "title": "Музыка",
+      "description": "Плеер, каталог, библиотека и синхронизация",
+      "icon": "music"
+    },
+    {
+      "id": "cloud",
+      "title": "Облако",
+      "description": "Консоль, хранилище и инфраструктура",
+      "icon": "cloud"
+    },
+    {
+      "id": "mail",
+      "title": "Почта",
+      "description": "Веб-почта и почтовые протоколы",
+      "icon": "mail"
+    },
+    {
+      "id": "disk",
+      "title": "Диск",
+      "description": "Хранилище файлов и API",
+      "icon": "hard-drive"
+    },
+    {
+      "id": "identity",
+      "title": "Яндекс ID",
+      "description": "Авторизация и OAuth",
+      "icon": "shield"
+    },
+    {
+      "id": "wiki",
+      "title": "Вики",
+      "description": "Корпоративные знания",
+      "icon": "book-open"
+    },
+    {
+      "id": "maps",
+      "title": "Карты",
+      "description": "Карты и геокодирование",
+      "icon": "map-pin"
+    },
+    {
+      "id": "search",
+      "title": "Поиск",
+      "description": "Поиск и веб-инструменты",
+      "icon": "search"
+    },
+    {
+      "id": "ai",
+      "title": "AI и SpeechKit",
+      "description": "AI Studio, модели и речь",
+      "icon": "sparkles"
+    },
+    {
+      "id": "other",
+      "title": "Другие сервисы",
+      "description": "Звонки, аналитика, маркет и погода",
+      "icon": "layers"
+    }
+  ],
+  "checks": [
+    {
+      "id": "music-web",
+      "category": "music",
+      "name": "Яндекс Музыка",
+      "detail": "Доступность веб-плеера",
+      "kind": "http",
+      "url": "https://music.yandex.ru/"
+    },
+    {
+      "id": "music-catalog",
+      "category": "music",
+      "name": "Music Catalog API",
+      "detail": "Публичный каталог жанров · REST",
+      "kind": "http",
+      "url": "https://api.music.yandex.net/genres"
+    },
+    {
+      "id": "music-rest",
+      "category": "music",
+      "name": "Music REST · аккаунт",
+      "detail": "Авторизованный клиент библиотеки",
+      "kind": "music_rest"
+    },
+    {
+      "id": "music-ynison",
+      "category": "music",
+      "name": "Ynison",
+      "detail": "Состояние воспроизведения · gRPC",
+      "kind": "music_ynison"
+    },
+    {
+      "id": "music-history",
+      "category": "music",
+      "name": "Music History",
+      "detail": "История прослушивания · REST",
+      "kind": "music_history"
+    },
+    {
+      "id": "music-queues",
+      "category": "music",
+      "name": "Music Queues",
+      "detail": "Очереди воспроизведения · REST",
+      "kind": "music_queues"
+    },
+    {
+      "id": "cloud-web",
+      "category": "cloud",
+      "name": "Yandex Cloud",
+      "detail": "Публичный портал платформы",
+      "kind": "http",
+      "url": "https://yandex.cloud/"
+    },
+    {
+      "id": "cloud-console",
+      "category": "cloud",
+      "name": "Cloud Console",
+      "detail": "Доступность веб-консоли",
+      "kind": "http",
+      "url": "https://console.yandex.cloud/"
+    },
+    {
+      "id": "cloud-storage",
+      "category": "cloud",
+      "name": "Object Storage · шлюз",
+      "detail": "Доступность точки входа S3 (не проверка бакетов)",
+      "kind": "http_gateway",
+      "url": "https://storage.yandexcloud.net/"
+    },
+    {
+      "id": "cloud-iam",
+      "category": "cloud",
+      "name": "Cloud IAM API",
+      "detail": "Для функциональной проверки нужен сервисный аккаунт",
+      "kind": "requires_key"
+    },
+    {
+      "id": "cloud-monitoring",
+      "category": "cloud",
+      "name": "Cloud Monitoring API",
+      "detail": "Для функциональной проверки нужен сервисный аккаунт",
+      "kind": "requires_key"
+    },
+    {
+      "id": "mail-web",
+      "category": "mail",
+      "name": "Яндекс Почта",
+      "detail": "Веб-интерфейс почтового ящика",
+      "kind": "http",
+      "url": "https://mail.yandex.ru/"
+    },
+    {
+      "id": "mail-imap",
+      "category": "mail",
+      "name": "IMAP · TLS",
+      "detail": "Установка защищённого соединения, не вход в ящик",
+      "kind": "tcp_tls",
+      "host": "imap.yandex.ru",
+      "port": 993
+    },
+    {
+      "id": "mail-smtp",
+      "category": "mail",
+      "name": "SMTP · TLS",
+      "detail": "Установка защищённого соединения, не отправка письма",
+      "kind": "tcp_tls",
+      "host": "smtp.yandex.ru",
+      "port": 465
+    },
+    {
+      "id": "mail-360",
+      "category": "mail",
+      "name": "Яндекс 360",
+      "detail": "Публичный портал для бизнеса",
+      "kind": "http",
+      "url": "https://360.yandex.ru/"
+    },
+    {
+      "id": "disk-web",
+      "category": "disk",
+      "name": "Яндекс Диск",
+      "detail": "Веб-интерфейс",
+      "kind": "http",
+      "url": "https://disk.yandex.ru/"
+    },
+    {
+      "id": "disk-api",
+      "category": "disk",
+      "name": "Disk REST API",
+      "detail": "Запрос к файлам требует авторизации",
+      "kind": "requires_key"
+    },
+    {
+      "id": "id-passport",
+      "category": "identity",
+      "name": "Яндекс ID",
+      "detail": "Портал управления аккаунтом",
+      "kind": "http",
+      "url": "https://passport.yandex.ru/"
+    },
+    {
+      "id": "id-oauth",
+      "category": "identity",
+      "name": "OAuth",
+      "detail": "Публичная точка входа авторизации",
+      "kind": "http",
+      "url": "https://oauth.yandex.ru/"
+    },
+    {
+      "id": "wiki-web",
+      "category": "wiki",
+      "name": "Яндекс Вики",
+      "detail": "Публичная точка входа",
+      "kind": "http",
+      "url": "https://wiki.yandex.ru/"
+    },
+    {
+      "id": "wiki-api",
+      "category": "wiki",
+      "name": "Wiki REST API",
+      "detail": "Проверка требует токен организации",
+      "kind": "requires_key"
+    },
+    {
+      "id": "maps-web",
+      "category": "maps",
+      "name": "Яндекс Карты",
+      "detail": "Доступность веб-карт",
+      "kind": "http",
+      "url": "https://yandex.ru/maps/"
+    },
+    {
+      "id": "maps-geocoder",
+      "category": "maps",
+      "name": "Geocoder API",
+      "detail": "Для проверки геокодирования нужен API-ключ",
+      "kind": "requires_key"
+    },
+    {
+      "id": "search-web",
+      "category": "search",
+      "name": "Яндекс Поиск",
+      "detail": "Главная точка входа",
+      "kind": "http",
+      "url": "https://ya.ru/"
+    },
+    {
+      "id": "search-webmaster",
+      "category": "search",
+      "name": "Вебмастер",
+      "detail": "Веб-интерфейс инструментов",
+      "kind": "http",
+      "url": "https://webmaster.yandex.ru/"
+    },
+    {
+      "id": "ai-studio",
+      "category": "ai",
+      "name": "AI Studio",
+      "detail": "Информация о платформе",
+      "kind": "http",
+      "url": "https://yandex.cloud/ru/services/ai-studio"
+    },
+    {
+      "id": "ai-models",
+      "category": "ai",
+      "name": "Foundation Models API",
+      "detail": "Функциональный тест требует ключ и квоту",
+      "kind": "requires_key"
+    },
+    {
+      "id": "ai-speech",
+      "category": "ai",
+      "name": "SpeechKit API",
+      "detail": "Функциональный тест требует ключ и квоту",
+      "kind": "requires_key"
+    },
+    {
+      "id": "ai-vision",
+      "category": "ai",
+      "name": "Vision API",
+      "detail": "Функциональный тест требует ключ и квоту",
+      "kind": "requires_key"
+    },
+    {
+      "id": "other-telemost",
+      "category": "other",
+      "name": "Телемост",
+      "detail": "Веб-платформа видеозвонков",
+      "kind": "http",
+      "url": "https://telemost.yandex.ru/"
+    },
+    {
+      "id": "other-metrika",
+      "category": "other",
+      "name": "Метрика",
+      "detail": "Веб-интерфейс аналитики",
+      "kind": "http",
+      "url": "https://metrika.yandex.ru/"
+    },
+    {
+      "id": "other-tracker",
+      "category": "other",
+      "name": "Трекер",
+      "detail": "Веб-интерфейс задач",
+      "kind": "http",
+      "url": "https://tracker.yandex.ru/"
+    },
+    {
+      "id": "other-market",
+      "category": "other",
+      "name": "Маркет",
+      "detail": "Веб-витрина",
+      "kind": "http",
+      "url": "https://market.yandex.ru/"
+    },
+    {
+      "id": "other-weather",
+      "category": "other",
+      "name": "Погода",
+      "detail": "Веб-прогноз",
+      "kind": "http",
+      "url": "https://yandex.ru/pogoda/"
+    }
+  ],
+  "results": [
+    {
+      "id": "music-web",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:47Z",
+      "latency_ms": 1062,
+      "http_code": 200
+    },
+    {
+      "id": "music-catalog",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:47Z",
+      "latency_ms": 1358,
+      "http_code": 200
+    },
+    {
+      "id": "music-rest",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "YANDEX_MUSIC_TOKEN не задан"
+    },
+    {
+      "id": "music-ynison",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "YANDEX_MUSIC_TOKEN не задан"
+    },
+    {
+      "id": "music-history",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "YANDEX_MUSIC_TOKEN не задан"
+    },
+    {
+      "id": "music-queues",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "YANDEX_MUSIC_TOKEN не задан"
+    },
+    {
+      "id": "cloud-web",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:48Z",
+      "latency_ms": 1609,
+      "http_code": 200
+    },
+    {
+      "id": "cloud-console",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:48Z",
+      "latency_ms": 2289,
+      "http_code": 200
+    },
+    {
+      "id": "cloud-storage",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:47Z",
+      "latency_ms": 897,
+      "http_code": 200
+    },
+    {
+      "id": "cloud-iam",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "Нужен API-ключ и сценарий проверки"
+    },
+    {
+      "id": "cloud-monitoring",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "Нужен API-ключ и сценарий проверки"
+    },
+    {
+      "id": "mail-web",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:48Z",
+      "latency_ms": 1692,
+      "http_code": 200
+    },
+    {
+      "id": "mail-imap",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:47Z",
+      "latency_ms": 605,
+      "transport": "tls"
+    },
+    {
+      "id": "mail-smtp",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:47Z",
+      "latency_ms": 838,
+      "transport": "tls"
+    },
+    {
+      "id": "mail-360",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:47Z",
+      "latency_ms": 899,
+      "http_code": 200
+    },
+    {
+      "id": "disk-web",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:49Z",
+      "latency_ms": 1719,
+      "http_code": 200
+    },
+    {
+      "id": "disk-api",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "Нужен API-ключ и сценарий проверки"
+    },
+    {
+      "id": "id-passport",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:50Z",
+      "latency_ms": 2743,
+      "http_code": 200
+    },
+    {
+      "id": "id-oauth",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:48Z",
+      "latency_ms": 1481,
+      "http_code": 200
+    },
+    {
+      "id": "wiki-web",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:49Z",
+      "latency_ms": 1405,
+      "http_code": 200
+    },
+    {
+      "id": "wiki-api",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "Нужен API-ключ и сценарий проверки"
+    },
+    {
+      "id": "maps-web",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:49Z",
+      "latency_ms": 1571,
+      "http_code": 200
+    },
+    {
+      "id": "maps-geocoder",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "Нужен API-ключ и сценарий проверки"
+    },
+    {
+      "id": "search-web",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:49Z",
+      "latency_ms": 1437,
+      "http_code": 200
+    },
+    {
+      "id": "search-webmaster",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:50Z",
+      "latency_ms": 1927,
+      "http_code": 200
+    },
+    {
+      "id": "ai-studio",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:50Z",
+      "latency_ms": 1781,
+      "http_code": 200
+    },
+    {
+      "id": "ai-models",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "Нужен API-ключ и сценарий проверки"
+    },
+    {
+      "id": "ai-speech",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "Нужен API-ключ и сценарий проверки"
+    },
+    {
+      "id": "ai-vision",
+      "status": "not_configured",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": null,
+      "reason": "Нужен API-ключ и сценарий проверки"
+    },
+    {
+      "id": "other-telemost",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:49Z",
+      "latency_ms": 992,
+      "http_code": 200
+    },
+    {
+      "id": "other-metrika",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:52Z",
+      "latency_ms": 3277,
+      "http_code": 200
+    },
+    {
+      "id": "other-tracker",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:50Z",
+      "latency_ms": 1573,
+      "http_code": 200
+    },
+    {
+      "id": "other-market",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:51Z",
+      "latency_ms": 1665,
+      "http_code": 200
+    },
+    {
+      "id": "other-weather",
+      "status": "ok",
+      "checked_at": "2026-10-20T16:35:51Z",
+      "latency_ms": 2086,
+      "http_code": 200
+    }
+  ]
+}
