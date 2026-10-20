@@ -43,6 +43,8 @@ jobs:
         run: |
           node --check site/app.js
           node monitor/test_graph.cjs
+          node --check site/live-api.js
+          node --test worker/test/*.test.mjs
       - name: Check Yandex endpoints
         env:
           YANDEX_MUSIC_TOKEN: ${{ secrets.YANDEX_MUSIC_TOKEN }}
