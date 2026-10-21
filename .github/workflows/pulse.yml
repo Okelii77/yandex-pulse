@@ -51,6 +51,24 @@ jobs:
           node monitor/test_graph.cjs
           node --check site/live-api.js
           node --test worker/test/*.test.mjs
+      - name: Verify Cloudflare manual-trigger readiness
+        if: github.event_name == 'push'
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          url = "https://yandex-pulse-api.oleg-pulse-03.workers.dev/api/health"
+          try:
+              with urllib.request.urlopen(url, timeout=15) as response:
+                  health = json.load(response)
+              print("Cloudflare API:", "reachable" if health.get("ok") else "unhealthy")
+              print("Trigger secrets:", "configured" if health.get("trigger_ready") is True else "missing/inactive")
+              if health.get("trigger_ready") is not True:
+                  raise SystemExit("Manual trigger not ready")
+          except Exception as e:
+              print("Health check failed:", type(e).__name__)
+              raise
+          PY
       - name: Restore cooldown from Cloudflare D1
         env:
           PULSE_API_URL: https://yandex-pulse-api.oleg-pulse-03.workers.dev
