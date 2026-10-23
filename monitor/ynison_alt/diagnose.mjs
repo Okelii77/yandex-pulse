@@ -7,11 +7,26 @@ import { confirmedState } from "./state-confirmation.mjs";
 const API = "https://yandex-pulse-api.oleg-pulse-03.workers.dev/api/status";
 const startAt = Date.now();
 const safeError = err => {
-  const known=["Error","NetworkError","WebSocketError","UnauthorizedError","TimedOutError","TimeoutError","TypeError"];
-  const e={type:known.includes(err?.name)?err.name:"OtherError"};
+  const known=["Error","NetworkError","WebSocketError","UnauthorizedError","TimedOutError","TimeoutError","TypeError","YnisonError"];
+  // Only known stage labels and integer codes are exported: NEVER error.message,
+  // which may include server response frames, session IDs or account details.
+  const name=err?.name;
+  const message=typeof err?.message==="string"?err.message:"";
+  const e={type:known.includes(name)?name:"OtherError"};
+  if (/^redirect (?:ws|frame)|^invalid redirect frame/i.test(message)) e.phase="redirector";
+  else if (/^state ws|^server returned an error/i.test(message)) e.phase="state socket/server";
+  else if (/^first state frame/i.test(message)) e.phase="state frame";
+  else e.phase="unspecified";
   for(const k of ["status","statusCode","httpCode","grpcCode","errorCode"]){
     if(Number.isInteger(err?.[k])&&err[k]>=0&&err[k]<1e10)e[k]=err[k];
   }
+  // The independent SDK exposes a retry delay for Ynison server go-away.
+  const retryMs=Number(err?.retryAfterMs);
+  if(Number.isInteger(retryMs)&&retryMs>0&&retryMs<=86400e3)
+    e.retry_after_at=new Date(Date.now()+retryMs).toISOString();
+  // Common WebSocket HTTP refusals ("Unexpected server response: 503").
+  const match=message.match(/(?:unexpected server response|status code|HTTP)[:\\s]+(401|403|429|500|502|503|504)\\b/i);
+  if(match)e.http_code=Number(match[1]);
   return e;
 };
 async function cooldown(){
@@ -50,7 +65,9 @@ async function diagnose(){
     while(Date.now()<end){
       if(confirmedState({receivedState,state:rt.state}))
         return {status:"ok",stage:"Ynison state"};
-      if(error)return {status:"error",stage:"Ynison websocket",error};
+      if(error)return {status:"error",stage:error.phase==="redirector"?"Ynison redirector":
+        error.phase==="state socket/server"?"Ynison state socket": "Ynison websocket",
+        error,...(error.retry_after_at?{retry_after_at:error.retry_after_at}:{})};
       await delay(400);
     }
     return {status:"timeout",stage:"Ynison state"};
@@ -72,6 +89,7 @@ const lines=["## Ynison · независимый JS-клиент",
   "| Длительность | "+report.duration_ms+" мс |"];
 if(report.error)lines.push("| Тип ошибки | "+report.error.type+" |");
 if(report.retry_after_at)lines.push("| Не раньше UTC | "+report.retry_after_at+" |");
+if(report.error?.http_code)lines.push("| HTTP при отказе | "+report.error.http_code+" |");
 lines.push("","Тест не отправляет команды воспроизведения и не публикует треки, токены или данные аккаунта.","");
 if(process.env.GITHUB_STEP_SUMMARY)await appendFile(process.env.GITHUB_STEP_SUMMARY,lines.join("\n"));
 console.log("Independent Ynison diagnostic:",report.status,"stage:",report.stage);
