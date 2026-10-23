@@ -51,6 +51,7 @@ jobs:
           node monitor/test_graph.cjs
           node --check site/live-api.js
           node --check monitor/ynison_alt/diagnose.mjs
+          node --test monitor/ynison_alt/state-confirmation.test.mjs
           node --test worker/test/*.test.mjs
       - name: Verify Cloudflare manual-trigger readiness
         if: github.event_name == 'push'
