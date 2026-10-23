@@ -1,6 +1,7 @@
 import { Client } from "@dvxch/yandex-music";
 import { appendFile, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
+import { confirmedState } from "./state-confirmation.mjs";
 
 // One-shot read-only diagnostic; no personal data or exception text is emitted.
 const API = "https://yandex-pulse-api.oleg-pulse-03.workers.dev/api/status";
@@ -47,7 +48,7 @@ async function diagnose(){
   try{
     const end=Date.now()+13000;
     while(Date.now()<end){
-      if(receivedState && rt.state !== null)
+      if(confirmedState({receivedState,state:rt.state}))
         return {status:"ok",stage:"Ynison state"};
       if(error)return {status:"error",stage:"Ynison websocket",error};
       await delay(400);
