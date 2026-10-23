@@ -113,6 +113,16 @@ def optional_music_probe(check: dict, token: str, previous: dict) -> dict:
         return result(check, "not_configured", reason="YANDEX_MUSIC_TOKEN не задан")
 
     if check["kind"] == "music_ynison":
+        # During independent JS comparison do not send any Python Ynison
+        # connection attempts. Retain the server-requested expiry so the
+        # separate manual diagnostic can safely honour it.
+        if os.environ.get("PULSE_YNISON_AUTOPROBE", "1").strip() == "0":
+            retry_at = from_iso(previous.get("retry_after_at"))
+            extras = {"reason": "Автоматическая проверка приостановлена для независимого теста"}
+            if retry_at:
+                extras["retry_after_at"] = iso(retry_at)
+            return result(check, "disabled", **extras)
+
         # A remote go-away request persists across scheduled workflow runs.
         retry_at = from_iso(previous.get("retry_after_at"))
         if retry_at and utc_now() < retry_at:

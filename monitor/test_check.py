@@ -38,6 +38,26 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(result["retry_after_at"], until)
         self.assertEqual(result["last_http_code"], 503)
 
+    def test_ynison_autoprobe_paused_without_network_and_retains_retry(self):
+        probe = {"id": "music-ynison", "kind": "music_ynison"}
+        until = m.iso(m.utc_now() + dt.timedelta(hours=1))
+        previous = {"retry_after_at": until, "status": "down", "http_code": 503}
+        with patch.dict("os.environ", {"PULSE_YNISON_AUTOPROBE": "0"}), \
+             patch.dict("sys.modules", {"yandex_music": None}):
+            output = m.optional_music_probe(probe, "placeholder-only-for-test", previous)
+        self.assertEqual(output["status"], "disabled")
+        self.assertEqual(output["retry_after_at"], until)
+        self.assertIsNone(output["latency_ms"])
+        self.assertNotIn("http_code", output)
+
+    def test_ynison_autoprobe_paused_even_after_retry_expires(self):
+        probe = {"id": "music-ynison", "kind": "music_ynison"}
+        previous = {"retry_after_at": m.iso(m.utc_now() - dt.timedelta(minutes=1))}
+        with patch.dict("os.environ", {"PULSE_YNISON_AUTOPROBE": "0"}), \
+             patch.dict("sys.modules", {"yandex_music": None}):
+            output = m.optional_music_probe(probe, "placeholder-only-for-test", previous)
+        self.assertEqual(output["status"], "disabled")
+
     def test_http_503_is_not_success(self):
         probe = {"id": "example", "kind": "http", "url": "https://example.org/"}
         class FakeResponse:

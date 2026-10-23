@@ -91,6 +91,7 @@ jobs:
           YC_VISION_API_KEY: ${{ secrets.YC_VISION_API_KEY }}
           YANDEX_MAPS_API_KEY: ${{ secrets.YANDEX_MAPS_API_KEY }}
           PULSE_ENABLE_BILLABLE_PROBES: ${{ vars.PULSE_ENABLE_BILLABLE_PROBES }}
+          PULSE_YNISON_AUTOPROBE: "0"  # temporarily pause Python Ynison during independent JS comparison
         run: python monitor/check.py
       - name: Upload results directly to D1 via GitHub OIDC
         env:
