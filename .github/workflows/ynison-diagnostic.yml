@@ -1,0 +1,36 @@
+name: Yandex Pulse · Ynison independent diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pulse-ynison-comparison
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: Independent JS client (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install independent SDK without install scripts
+        run: npm install --prefix monitor/ynison_alt --ignore-scripts --no-audit --no-fund
+      - name: Diagnose with server go-away protection
+        env:
+          YANDEX_MUSIC_TOKEN: ${{ secrets.YANDEX_MUSIC_TOKEN }}
+        run: node monitor/ynison_alt/diagnose.mjs
+      - name: Publish sanitized result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ynison-diagnostic
+          path: ynison-diagnostic.json
+          if-no-files-found: ignore
+          retention-days: 7
