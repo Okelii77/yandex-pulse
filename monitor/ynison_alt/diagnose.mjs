@@ -25,7 +25,7 @@ const safeError = err => {
   if(Number.isInteger(retryMs)&&retryMs>0&&retryMs<=86400e3)
     e.retry_after_at=new Date(Date.now()+retryMs).toISOString();
   // Common WebSocket HTTP refusals ("Unexpected server response: 503").
-  const match=message.match(/(?:unexpected server response|status code|HTTP)[:\\s]+(401|403|429|500|502|503|504)\\b/i);
+  const match=message.match(/(?:unexpected server response|status code|HTTP)[:\s]+(401|403|429|500|502|503|504)\b/i);
   if(match)e.http_code=Number(match[1]);
   return e;
 };
