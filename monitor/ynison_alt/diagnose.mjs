@@ -34,15 +34,20 @@ async function diagnose(){
   try{c=await new Client({token,retries:0}).init();}
   catch(e){return {status:"error",stage:"REST init",error:safeError(e)};}
   let rt;
-  try{rt=c.realtime({staleTimeoutMs:120000});}
+  try{rt=c.realtime({staleTimeoutMs:120000,reconnect:false});}
   catch(e){return {status:"error",stage:"realtime init",error:safeError(e)};}
+// Consider Ynison successful ONLY after an actual state frame.
+// lastStateAgeMs is non-null when the transport *starts*, before any state.
+// The previous test used this property and could falsely report success.
   let error=null;
+  let receivedState=false;
+  rt.on("state",()=>{receivedState=true;});
   rt.on("error",e=>{error??=safeError(e);});
   const running=Promise.resolve().then(()=>rt.start()).catch(e=>{error??=safeError(e);});
   try{
     const end=Date.now()+13000;
     while(Date.now()<end){
-      if(rt.state||(Number.isFinite(rt.lastStateAgeMs)&&rt.lastStateAgeMs>=0))
+      if(receivedState && rt.state !== null)
         return {status:"ok",stage:"Ynison state"};
       if(error)return {status:"error",stage:"Ynison websocket",error};
       await delay(400);
