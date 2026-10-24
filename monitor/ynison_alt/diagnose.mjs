@@ -34,7 +34,8 @@ async function cooldown(){
   if(!resp.ok)throw Error("no status");
   const data=await resp.json();
   const stamp=Date.parse(data?.generated_at||"");
-  if(!Number.isFinite(stamp)||Date.now()-stamp>2*3600e3)throw Error("stale");
+  // Snapshot age may exceed 2h when GitHub cron is delayed; preserve server go-away expiry.
+  if(!Number.isFinite(stamp)||Date.now()-stamp>24*3600e3)throw Error("stale");
   const row=data?.results?.find(x=>x.id==="music-ynison");
   if(!row)throw Error("no ynison probe");
   const until=Date.parse(row.retry_after_at||"");
