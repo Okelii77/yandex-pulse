@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Ynison · Сравнение браузерного WebSocket | Yandex Pulse</title>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#111;color:#f5f5f5}
+*{box-sizing:border-box}body{max-width:1050px;margin:auto;padding:32px 18px 72px;line-height:1.55}
+a{color:#ffdb44}h1{font-size:clamp(28px,5vw,44px);margin:18px 0 4px}
+.kicker{color:#ffdb44;font-weight:800;letter-spacing:.15em;font-size:12px}
+.muted{color:#b9b9b9}strong{color:#ffdb44}
+.card{background:#1b1b1b;border:1px solid #383838;border-radius:18px;padding:21px;margin:23px 0}
+.note{border-left:3px solid #ffdb44;padding-left:14px;color:#dadada}
+input[type=file]{display:block;width:100%;margin-top:14px;border:1px dashed #8a7b2c;border-radius:10px;padding:15px;background:#242424;color:#fff}
+button{padding:12px 18px;border-radius:10px;background:#ffdb44;border:0;color:#161616;font-size:15px;font-weight:750;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}textarea{resize:vertical;width:100%;min-height:180px;background:#0b0b0b;border:1px solid #555;color:#f7f7f7;border-radius:9px;padding:12px;font:12px/1.5 ui-monospace,monospace}
+table{border-collapse:collapse;width:100%;font-size:12px}th,td{text-align:left;white-space:nowrap;border-bottom:1px solid #393939;padding:10px 12px}
+.scroll{overflow-x:auto}th{color:#ffdb44}li{margin:8px 0}code{background:#303030;padding:1px 5px;border-radius:4px}
+</style></head><body>
+<div class="kicker">YANDEX PULSE / ПРОТОКОЛЫ</div>
+<h1>Аудит Ynison</h1><p class="muted">Безопасное сравнение WebSocket-подключения официального веб-плеера и сторонних клиентов.</p>
+<div class="card"><h2>Как снять данные в браузере</h2>
+<ol>
+<li>На компьютере открой <b>music.yandex.ru</b> в Chrome или Яндекс Браузере и авторизуйся.</li>
+<li>Нажми <b>F12</b> → <b>Network (Сеть)</b> → фильтр <b>WS / WebSocket</b>. Включи <b>Preserve log</b>.</li>
+<li>Обнови страницу музыки, запусти трек. Убедись, что соединения Ynison появились в сети.</li>
+<li>В Network выбери <b>Export HAR (sanitized)</b> / <b>Сохранить HAR (без конфиденциальных данных)</b>. Если такой опции нет, всё равно <strong>не отправляй HAR в чат</strong>: файл читается только ниже, локально в браузере.</li>
+<li>Выбери HAR-файл ниже. Скопируй только получившуюся <b>очищенную сводку</b>.</li>
+</ol><p class="note"><strong>Важно:</strong> HAR может содержать OAuth-токены, cookies, данные аккаунта и истории запросов. Никому его не присылай и не загружай в публичный репозиторий. Этот инструмент анализирует файл непосредственно в твоём браузере: нет отправки на сервер, внешних библиотек, аналитики или сохранения содержимого.</p>
+</div>
+<div class="card"><h2>Загрузить HAR локально</h2><label for="file">Файл .har или .json — максимум 24 МБ</label><input id="file" type="file" accept=".har,.json,application/json">
+<p id="status" aria-live="polite" class="muted"></p><div class="scroll"><table><thead><tr><th>№</th><th>Этап</th><th>Транспорт</th><th>HTTP</th><th>Авторизация</th><th>Origin</th><th>WS v2</th><th>Тип</th><th>App</th><th>Ticket</th></tr></thead><tbody id="results"></tbody></table></div>
+<h3>Безопасная сводка</h3><textarea id="safe-report" readonly aria-label="Очищенный отчёт"></textarea><p><button id="copy" disabled>Скопировать очищенную сводку</button></p></div>
+<div class="card"><h2>Что сравниваем</h2><p>Python-клиент, независимый JavaScript-клиент и .NET-клиент используют два этапа: <b>redirector → state</b>. Дальше сравним наличие OAuth/cookie, Origin, WebSocket-subprotocol <code>Bearer, v2, ...</code>, тип и название приложения, наличие тикета и сеанса.</p>
+<p>Официальный браузерный запрос заранее неизвестен: мы не будем выдавать параметры сторонних реализаций за параметры Яндекса.</p></div>
+<p><a href="./">← Вернуться в Yandex Pulse</a></p>
+<script type="module" src="./ynison-audit-ui.mjs"></script>
+</body></html>
