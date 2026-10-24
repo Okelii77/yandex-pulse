@@ -321,6 +321,7 @@
       '<div class="detail-disclaimer">«Отвечает» означает успешный ответ <b>данной пробы</b> из сети GitHub Actions. Это не гарантия корректной работы всех функций сервиса для всех пользователей.'+
       (result.note?'<br><br>'+esc(result.note):'')+'</div>'+
       (c.id==="music-ynison"?'<div class="detail-disclaimer"><b>Дополнительная диагностика</b><br>Можно проверить Ynison через независимый JS-клиент, не используя компьютер. Тест запускается вручную на GitHub и соблюдает паузу сервера. Результат смотри в Summary выполненного workflow.</div><a class="detail-link" target="_blank" rel="noopener noreferrer" href="https://github.com/Okelii77/yandex-pulse/actions/workflows/ynison-diagnostic.yml">Запустить независимую проверку ↗</a><br>':"")+ 
+      (c.id==="music-ynison"?'<a class="detail-link" target="_blank" rel="noopener noreferrer" href="ynison-audit.html">Сравнить протокол с официальным веб-плеером ↗</a><br>':"")+ 
       (c.url && c.url.startsWith("https://")?'<a class="detail-link" target="_blank" rel="noopener noreferrer" href="'+esc(c.url)+'">Открыть проверяемый адрес ↗</a>':'');
   }
   let toastTimer;
