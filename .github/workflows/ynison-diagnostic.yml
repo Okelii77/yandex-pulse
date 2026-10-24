@@ -2,11 +2,6 @@ name: Yandex Pulse · Ynison independent diagnostic
 
 on:
   workflow_dispatch:
-  # One-time automated validation; this temporary push trigger will be removed.
-  push:
-    branches: [main]
-    paths:
-      - 'monitor/ynison_alt/diagnose.mjs'
 
 permissions:
   contents: read
