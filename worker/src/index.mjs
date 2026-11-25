@@ -1,3 +1,4 @@
+import { acquireYnison, finishYnison } from "./ynison-gate.mjs";
 /*
  * Yandex Pulse API — Cloudflare Workers + D1.
  * Open status and history, authenticated ingestion, Turnstile-protected manual
@@ -132,7 +133,7 @@ const b64url = input => {
   const decoded=atob(str+"=".repeat((4-str.length%4)%4));
   return Uint8Array.from(decoded,c=>c.charCodeAt(0));
 };
-async function githubOidcValid(token) {
+async function githubOidcValid(token, audience="yandex-pulse-ingest", workflow="pulse.yml") {
   try {
     if(!token || token.length>12000)return false;
     const parts=token.split(".");
@@ -144,11 +145,11 @@ async function githubOidcValid(token) {
        claims.exp<=seconds||claims.exp>seconds+600 ||
        claims.nbf>seconds || claims.iat>seconds+30 ||
        claims.iss!=="https://token.actions.githubusercontent.com" ||
-       claims.aud!=="yandex-pulse-ingest" ||
+       claims.aud!==audience ||
        claims.repository!=="Okelii77/yandex-pulse" ||
        String(claims.repository_id)!=="1427282907" ||
        claims.ref!=="refs/heads/main" ||
-       claims.workflow_ref!=="Okelii77/yandex-pulse/.github/workflows/pulse.yml@refs/heads/main")
+       claims.workflow_ref!==`Okelii77/yandex-pulse/.github/workflows/${workflow}@refs/heads/main`)
       return false;
     const response=await fetch("https://token.actions.githubusercontent.com/.well-known/jwks",{
       cf:{cacheTtl:3600,cacheEverything:true}
@@ -260,6 +261,18 @@ export default {
         return data ? json(data,200,cors) : json({error:"waiting_for_first_probe"},503,cors);
       }
       if(url.pathname==="/api/history" && request.method==="GET")return await historyResponse(request,env,cors,ctx);
+      if(request.method==="POST" && ["/api/ynison/acquire","/api/ynison/finish"].includes(url.pathname)){
+        const auth=request.headers.get("Authorization")||"";
+        if(!auth.startsWith("Bearer ") || !await githubOidcValid(auth.slice(7),"yandex-pulse-ynison","ynison-diagnostic.yml"))
+          return json({error:"unauthorized"},401,cors);
+        if(Number(request.headers.get("Content-Length")||0)>2048)return json({error:"payload_too_large"},413,cors);
+        const raw=await request.text();
+        if(raw.length>2048)return json({error:"payload_too_large"},413,cors);
+        let body;
+        try{body=JSON.parse(raw);}catch{return json({error:"invalid_json"},400,cors);}
+        const result=url.pathname.endsWith("/acquire")?await acquireYnison(env.DB,body):await finishYnison(env.DB,body);
+        return json(result.body,result.status,cors);
+      }
       if(url.pathname==="/api/ingest" && request.method==="POST")return await ingest(request,env,cors);
       if(url.pathname==="/api/trigger" && request.method==="POST")return await trigger(request,env,cors);
       return json({error:"not_found"},404,cors);

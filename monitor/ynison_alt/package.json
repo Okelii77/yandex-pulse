@@ -5,6 +5,6 @@
   "description": "Independent manually triggered Ynison diagnostic",
   "dependencies": {
     "@dvxch/yandex-music": "0.3.0",
-    "ws": "^8.18.0"
+    "ws": "8.18.3"
   }
 }

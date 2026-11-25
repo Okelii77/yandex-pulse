@@ -32,7 +32,8 @@ class CatalogTests(unittest.TestCase):
         probe = {"id": "music-ynison", "kind": "music_ynison"}
         until = m.iso(m.utc_now() + dt.timedelta(minutes=58))
         previous = {"retry_after_at": until, "http_code": 503, "error_code": 500140000}
-        with patch.dict("sys.modules", {"yandex_music": None}):
+        with patch.dict("os.environ", {"PULSE_YNISON_AUTOPROBE": "1"}), \
+             patch.dict("sys.modules", {"yandex_music": None}):
             result = m.optional_music_probe(probe, "placeholder-only-for-test", previous)
         self.assertEqual(result["status"], "cooldown")
         self.assertEqual(result["retry_after_at"], until)
@@ -57,6 +58,12 @@ class CatalogTests(unittest.TestCase):
              patch.dict("sys.modules", {"yandex_music": None}):
             output = m.optional_music_probe(probe, "placeholder-only-for-test", previous)
         self.assertEqual(output["status"], "disabled")
+
+    def test_ynison_flag_cannot_bypass_manual_gate(self):
+        probe = {"id": "music-ynison", "kind": "music_ynison"}
+        with patch.dict("os.environ", {"PULSE_YNISON_AUTOPROBE": "1"}), \
+             patch.dict("sys.modules", {"yandex_music": None}):
+            self.assertEqual(m.optional_music_probe(probe, "test", {})["status"], "disabled")
 
     def test_http_503_is_not_success(self):
         probe = {"id": "example", "kind": "http", "url": "https://example.org/"}

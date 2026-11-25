@@ -1,0 +1,118 @@
+[
+  {
+    "name": "empty JSON",
+    "frame": {},
+    "expected": null
+  },
+  {
+    "name": "service frame",
+    "frame": {
+      "devices": []
+    },
+    "expected": null
+  },
+  {
+    "name": "error dominates state",
+    "frame": {
+      "error": {},
+      "player_state": {
+        "status": {
+          "paused": true
+        },
+        "player_queue": {
+          "current_playable_index": -1
+        }
+      }
+    },
+    "expected": null
+  },
+  {
+    "name": "empty nested defaults",
+    "frame": {
+      "player_state": {
+        "status": {},
+        "player_queue": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "name": "valid explicit idle",
+    "frame": {
+      "player_state": {
+        "status": {
+          "paused": true
+        },
+        "player_queue": {
+          "current_playable_index": -1
+        }
+      }
+    },
+    "expected": "no_data"
+  },
+  {
+    "name": "empty queue",
+    "frame": {
+      "playerState": {
+        "status": {
+          "paused": true
+        },
+        "playerQueue": {
+          "playableList": []
+        }
+      }
+    },
+    "expected": "no_data"
+  },
+  {
+    "name": "protobuf omitted zero index",
+    "frame": {
+      "playerState": {
+        "status": {
+          "durationMs": "180000"
+        },
+        "playerQueue": {
+          "playableList": [
+            {
+              "playableId": "synthetic"
+            }
+          ]
+        }
+      }
+    },
+    "expected": "ok"
+  },
+  {
+    "name": "invalid index",
+    "frame": {
+      "player_state": {
+        "status": {
+          "paused": false
+        },
+        "player_queue": {
+          "current_playable_index": 2,
+          "playable_list": [
+            {
+              "playable_id": "synthetic"
+            }
+          ]
+        }
+      }
+    },
+    "expected": null
+  },
+  {
+    "name": "invalid duration",
+    "frame": {
+      "player_state": {
+        "status": {
+          "duration_ms": "not-number"
+        },
+        "player_queue": {
+          "current_playable_index": -1
+        }
+      }
+    },
+    "expected": null
+  }
+]
