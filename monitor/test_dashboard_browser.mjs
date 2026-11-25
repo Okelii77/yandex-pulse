@@ -70,12 +70,28 @@ try{
   };
   const click=selector=>evalJS("document.querySelector("+JSON.stringify(selector)+").click()");
   const shot=async name=>{const r=await send("Page.captureScreenshot",{format:"png"});await writeFile(join(out,name+".png"),Buffer.from(r.data,"base64"));};
-  for(const [name,width,height] of [["desktop",1440,900],["mobile",390,844]]){
+  for(const [name,width,height] of [["desktop",1440,900],["mobile",390,844],["small-mobile",320,640]]){
     await send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:false});
     await send("Page.navigate",{url:origin+"/#/"});
     await wait("document.querySelectorAll('.service-card').length===3");
     assert.match(await evalJS("document.title"),/Yandex Pulse/);
     assert.equal(await evalJS("document.documentElement.scrollWidth<=innerWidth"),true,"horizontal overflow "+name);
+    const banner=await evalJS(`(()=>{
+      const box=document.querySelector("#data-health"), dot=box.querySelector(".data-health-dot"),
+        title=box.querySelector(".data-health-title"), detail=box.querySelector(".data-health-detail"),
+        source=box.querySelector(".data-health-source");
+      const b=box.getBoundingClientRect(),d=dot.getBoundingClientRect(),t=title.getBoundingClientRect(),
+        p=detail.getBoundingClientRect(),s=source.getBoundingClientRect();
+      return {dotText:dot.textContent,title:title.textContent,detail:detail.textContent,source:source.textContent,
+        contained:[d,t,p,s].every(r=>r.left>=b.left&&r.right<=b.right&&r.top>=b.top&&r.bottom<=b.bottom),
+        separate:d.right<=t.left&&t.bottom<=p.top&&(s.left>=p.right||s.top>=p.bottom)};
+    })()`);
+    assert.equal(banner.dotText,"","decorative dot must stay empty");
+    assert.equal(banner.title,"Опубликованный снимок");
+    assert.equal(banner.detail,"Последняя опубликованная проверка · не официальный статус Яндекса");
+    assert.equal(banner.source,"GitHub Pages");
+    assert.equal(banner.contained,true,"data health content outside banner "+name);
+    assert.equal(banner.separate,true,"data health elements overlap "+name);
     await shot(name+"-overview");
     await click('[data-filter="down"]');
     await wait("document.querySelectorAll('.service-card').length===1");
@@ -84,7 +100,7 @@ try{
     await wait("!!document.querySelector('.reset-filters')");
     await click(".reset-filters");
     await wait("document.querySelectorAll('.service-card').length===3");
-    await click(name==="mobile"?'.mobile-tab[href="#/music"]':'.nav-item[href="#/music"]');
+    await click(name!=="desktop"?'.mobile-tab[href="#/music"]':'.nav-item[href="#/music"]');
     await wait("document.querySelectorAll('.service-card').length===2");
     assert.equal(await evalJS("document.querySelector('#all-count').textContent"),"2");
     await click("#jump-to-checks");

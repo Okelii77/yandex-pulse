@@ -286,14 +286,14 @@ html[data-theme="light"]{--subtle:#666970;--ring:rgba(126,97,0,.65)}
 .hero-action-primary{border:0;min-height:44px}
 .hero-art{transform:translateY(-50%) scale(.72);right:-4%}
 .data-health{display:flex;align-items:center;gap:12px;padding:13px 16px;margin-top:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
-.data-health>div{flex:1;min-width:0}
-.data-health strong,.data-health div>span{display:block}
-.data-health strong{font-size:13px}
-.data-health div>span{font-size:11px;color:var(--muted);margin-top:2px}
+.data-health-copy{flex:1;min-width:0;overflow-wrap:anywhere}
+.data-health-title,.data-health-detail{display:block;line-height:1.45}
+.data-health-title{font-size:13px}
+.data-health-detail{font-size:11px;color:var(--muted);margin-top:2px}
 .data-health-dot{width:9px;height:9px;border-radius:50%;background:var(--subtle);flex-shrink:0}
 .data-health[data-state="ok"] .data-health-dot{background:var(--green);box-shadow:0 0 0 4px var(--green-bg)}
 .data-health[data-state="warning"] .data-health-dot{background:var(--amber);box-shadow:0 0 0 4px var(--amber-bg)}
-.data-health-source{font-size:11px;color:var(--muted);text-align:right}
+.data-health-source{flex:0 0 auto;max-width:32%;font-size:11px;line-height:1.45;color:var(--muted);text-align:right;overflow-wrap:anywhere}
 .metric-card{min-height:120px;padding:17px 20px}
 .metric-value,.summary-number,.mini-latency,.nav-count,.metric-footer{font-variant-numeric:tabular-nums}
 .metric-top,.metric-footer{font-size:12px}
@@ -340,7 +340,9 @@ html[data-theme="light"]{--subtle:#666970;--ring:rgba(126,97,0,.65)}
  .metric-top{font-size:11px}.metric-footer{font-size:11px}
  .filter-options{justify-content:flex-start;gap:7px 13px}.filter{font-size:11px}
  .service-name{font-size:13px}.service-sub{font-size:11px}
- .data-health-source{display:none}
+ .data-health{display:grid;grid-template-columns:9px minmax(0,1fr);align-items:start;gap:4px 10px}
+ .data-health-dot{margin-top:5px}
+ .data-health-source{grid-column:2;max-width:none;text-align:left}
  .detail-modal{max-height:92dvh}.modal-inner{padding-bottom:max(26px,env(safe-area-inset-bottom))}
  .pulse-trigger-panel{padding:24px 16px}.pulse-trigger-panel h2{font-size:22px}
 }
