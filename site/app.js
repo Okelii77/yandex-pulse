@@ -143,14 +143,27 @@
       Array.from({length:Math.max(0,20-recent.length)},()=>'<span class="mini-bar" title="Нет данных"></span>').join("") +
       recent.map(p=>'<span class="mini-bar '+esc(p[1])+'" title="'+esc(fmtDate(p[0]))+'"></span>').join("")+'</div>';
   }
+  function ynisonCardDiagnostic(diagnostic,now){
+    const last=diagnostic?.last_diagnostic;
+    const time=Date.parse(last?.checked_at);
+    const variants={ok:["ok","Ручная: ОК"],no_data:["no_data","Ручная: нет данных"],error:["down","Ручная: ошибка"],timeout:["degraded","Ручная: таймаут"],unknown:["unknown","Ручная: неизвестно"]};
+    if(diagnostic?.schema!==1||diagnostic.automatic!==false||diagnostic.unavailable||!last||!["python","javascript"].includes(last.client)||!Number.isFinite(time)||time>now||!Object.hasOwn(variants,last.outcome))return null;
+    const [status,label]=variants[last.outcome];
+    return {status:now-time>86400000?"unknown":status,label:now-time>86400000?"Ручная: устарела":label,checked_at:last.checked_at};
+  }
   function serviceCard(check,row) {
     const status = row?.status || "unknown";
-    return '<button type="button" class="service-card" data-check="'+esc(check.id)+'" aria-label="Подробнее: '+esc(check.name)+' · '+esc((STATES[status]||STATES.unknown)[0])+'">' +
+    const paused=check.id==="music-ynison"&&status==="disabled";
+    const manual=paused?ynisonCardDiagnostic(state.ynisonDiagnostic,Date.now()):null;
+    const label=manual?manual.label:paused?"Автопауза":(STATES[status]||STATES.unknown)[0];
+    const detail=paused?check.detail+" · Автопроверка приостановлена"+(manual?" · Ручная: "+fmtDate(manual.checked_at,true):""):check.detail;
+    const displayBadge=paused?'<span class="badge '+esc(manual?.status||status)+'"><span class="badge-dot"></span>'+esc(label)+'</span>':badge(status);
+    return '<button type="button" class="service-card" data-check="'+esc(check.id)+'" aria-label="Подробнее: '+esc(check.name)+' · '+esc(label)+'">' +
       '<span class="service-icon">'+icon(cat(check.category)?.icon)+'</span>' +
-      '<span class="service-desc"><span class="service-name">'+esc(check.name)+'</span><span class="service-sub">'+esc(check.detail)+'</span>' +
+      '<span class="service-desc"><span class="service-name">'+esc(check.name)+'</span><span class="service-sub">'+esc(detail)+'</span>' +
       (state.category==="overview"?'<span class="service-category">'+esc(cat(check.category)?.title || "")+'</span>':"") +
       '</span><span class="service-right">'+bars(check.id)+'<span class="mini-latency">'+fmtMs(row?.latency_ms)+'</span>'+
-      badge(status)+'<span class="card-arrow" aria-hidden="true">›</span></span></button>';
+      displayBadge+'<span class="card-arrow" aria-hidden="true">›</span></span></button>';
   }
   function renderChecks() {
     const focused=document.activeElement?.closest?.("[data-check]")?.dataset.check;
@@ -317,13 +330,22 @@
     $("#modal-close").focus();
     if(id==="music-ynison")loadYnisonDiagnostic();
   }
+  let ynisonRequest=null, ynisonLoadedAt=0;
   async function loadYnisonDiagnostic(){
-    const current=state.modal;
-    if(!window.PulseLive?.enabled())return;
-    state.ynisonDiagnostic=null;
-    try{state.ynisonDiagnostic=await window.PulseLive.ynisonStatus();}
-    catch{state.ynisonDiagnostic={unavailable:true};}
-    if(state.modal===current&&current==="music-ynison")renderModal();
+    if(!window.PulseLive?.enabled()||!checks().some(c=>c.id==="music-ynison"))return;
+    if(ynisonRequest)return ynisonRequest;
+    if(Date.now()-ynisonLoadedAt<60000)return;
+    ynisonRequest=(async()=>{
+      try{
+        const value=await window.PulseLive.ynisonStatus();
+        if(value?.schema!==1||value.automatic!==false)throw Error("Invalid diagnostic");
+        state.ynisonDiagnostic=value;
+      }catch{state.ynisonDiagnostic={unavailable:true};}
+      finally{ynisonLoadedAt=Date.now();ynisonRequest=null;}
+      renderChecks();
+      if(state.modal==="music-ynison")renderModal();
+    })();
+    return ynisonRequest;
   }
   function ynisonDiagnosticMarkup(){
     const x=state.ynisonDiagnostic;
@@ -334,7 +356,7 @@
     return '<div class="detail-stat ynison-diagnostic"><span>Последняя ручная диагностика · отдельный результат</span><strong>'+esc(title)+'</strong>'+
       (last?'<p>'+esc(names[last.client]||"Клиент")+' · '+esc(fmtDate(last.checked_at))+'</p>':"")+
       (x?.retry_after_at?'<p>Следующая попытка не раньше '+esc(fmtDate(x.retry_after_at))+'</p>':"")+
-      '<p>Автоматическая проверка выключена. Результат относится к конкретному аккаунту и времени, а не ко всему сервису.</p></div>';
+      '<p>Автоматическая проверка выключена. Результат относится к конкретному аккаунту и времени, а не ко всему сервису. Сводка и график учитывают только автоматические пробы.</p></div>';
   }
   function closeModal() {
     const id=state.modal;
@@ -459,6 +481,7 @@
       state.loadFailed=false;
       render();
       if (state.modal) renderModal();
+      void loadYnisonDiagnostic();
       if(!silent) {
         if(["archive","last_known"].includes(state.source))notify("Live API временно недоступен. Показаны сохранённые данные.");
         else notify(refreshMessage(previousTimestamp,data.generated_at));

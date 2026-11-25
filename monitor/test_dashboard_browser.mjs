@@ -126,6 +126,7 @@ try{
       const url=new URL(typeof input==="string"?input:input.url,location.href), mode=window.__pulseMode;
       if(url.hostname==="pulse.test"){
         if(["archive","offline","lost"].includes(mode))throw Error("synthetic live outage");
+        if(url.pathname==="/api/ynison/status")return Response.json({schema:1,automatic:false,last_diagnostic:{client:"javascript",outcome:"ok",checked_at:sample.generated_at},retry_after_at:null});
         if(url.pathname==="/api/status")return Response.json(mode==="stale"?{...sample,generated_at:new Date(Date.now()-3*3600000).toISOString()}:mode==="history"?{...sample,generated_at:new Date(Date.now()-1000).toISOString()}:sample);
         if(url.pathname==="/api/history"){if(mode==="history")throw Error("synthetic history outage");return Response.json(history);}
       }
@@ -150,6 +151,9 @@ try{
       if(mode==="history"||mode==="static-history")assert.match(await evalJS("document.querySelector('.data-health-detail').textContent"),/история/);
       if(mode==="offline")assert.match(await evalJS("document.querySelector('#topbar-check').textContent"),/Данные недоступны/);
       if(mode==="fresh"){
+        await wait("document.querySelector('[data-check=music-ynison] .badge')?.textContent==='Ручная: ОК'");
+        assert.match(await evalJS("document.querySelector('[data-check=music-ynison] .service-sub').textContent"),/Автопроверка приостановлена/);
+        assert.equal(await evalJS("document.querySelector('[data-filter=ok] span').textContent"),"1");
         await evalJS("window.__pulseMode='lost'");
         await click("#refresh-button");
         await wait("document.querySelector('.data-health-title').textContent==='Показаны сохранённые данные'&&!document.querySelector('#refresh-button').disabled");

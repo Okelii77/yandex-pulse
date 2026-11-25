@@ -36,3 +36,14 @@ test("failed refresh differs from initial loading and never claims live",()=>{
 test("published status without history remains usable but labelled",()=>{
   assert.match(describe(snapshot,"legacy",now,false).detail,/история/);
 });
+
+const ynisonBegin=code.indexOf("  function ynisonCardDiagnostic("),ynisonEnd=code.indexOf("  function serviceCard(",ynisonBegin);
+const manual=new Function(code.slice(ynisonBegin,ynisonEnd)+"\nreturn ynisonCardDiagnostic;")();
+test("Ynison card labels manual results without inventing automatic status",()=>{
+  const d={schema:1,automatic:false,last_diagnostic:{client:"javascript",outcome:"ok",checked_at:new Date(now-1000).toISOString()}};
+  assert.equal(manual(d,now).label,"Ручная: ОК");
+  assert.equal(manual(d,now+86400000).status,"unknown");
+  assert.equal(manual({...d,unavailable:true},now),null);
+  assert.equal(manual({...d,automatic:true},now),null);
+  assert.equal(manual({...d,last_diagnostic:{...d.last_diagnostic,outcome:"error"}},now).status,"down");
+});
