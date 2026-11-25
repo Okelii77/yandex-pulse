@@ -7,12 +7,12 @@ function db(s=snapshot()){
   let gate=null;
   return {prepare(sql){
     if(sql.startsWith("SELECT payload"))return {first:async()=>({payload:JSON.stringify(s)})};
-    if(sql.startsWith("INSERT"))return {bind:(lease,until,t)=>({first:async()=>{
+    if(sql.startsWith("INSERT"))return {bind:(lease,until,client,t)=>({first:async()=>{
       if(gate&&gate.blocked_until>t)return null;
       gate={lease_id:lease,blocked_until:until};return gate;
     }})};
     if(sql.startsWith("SELECT blocked_until"))return {first:async()=>gate};
-    if(sql.startsWith("UPDATE"))return {bind:(until,lease,t)=>({first:async()=>{
+    if(sql.startsWith("UPDATE"))return {bind:(until,outcome,finished,lease,t)=>({first:async()=>{
       if(!gate||gate.lease_id!==lease||gate.blocked_until<=t)return null;
       gate={lease_id:"",blocked_until:until};return gate;
     }})};

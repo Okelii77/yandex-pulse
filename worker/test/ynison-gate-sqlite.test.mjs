@@ -2,7 +2,7 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
 import {readFileSync} from "node:fs";
-import {acquireYnison,finishYnison} from "../src/ynison-gate.mjs";
+import {acquireYnison,finishYnison,publicYnisonStatus} from "../src/ynison-gate.mjs";
 test("real SQLite migration and reservation statements enforce a shared lease",async()=>{
   const sql=new DatabaseSync(":memory:");
   try{
@@ -19,6 +19,9 @@ test("real SQLite migration and reservation statements enforce a shared lease",a
     assert.equal((await acquireYnison(db,{client:"javascript"},now)).status,429);
     const f=await finishYnison(db,{lease_id:a.body.lease_id,outcome:"error",retry_after_seconds:3600},now);
     assert.equal(Date.parse(f.body.retry_after_at),now+3615000);
+    const status=await publicYnisonStatus(db,now);
+    assert.deepEqual(status,{schema:1,automatic:false,last_diagnostic:{client:"python",outcome:"error",checked_at:stamp},retry_after_at:f.body.retry_after_at});
+    assert.equal(JSON.stringify(status).includes(a.body.lease_id),false);
     assert.equal((await acquireYnison(db,{client:"javascript"},now+3615000)).status,200);
   }finally{sql.close();}
 });

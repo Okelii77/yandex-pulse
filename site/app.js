@@ -308,6 +308,26 @@
     $(".app-shell").inert=true;
     document.body.style.overflow="hidden";
     $("#modal-close").focus();
+    if(id==="music-ynison")loadYnisonDiagnostic();
+  }
+  async function loadYnisonDiagnostic(){
+    const current=state.modal;
+    if(!window.PulseLive?.enabled())return;
+    state.ynisonDiagnostic=null;
+    try{state.ynisonDiagnostic=await window.PulseLive.ynisonStatus();}
+    catch{state.ynisonDiagnostic={unavailable:true};}
+    if(state.modal===current&&current==="music-ynison")renderModal();
+  }
+  function ynisonDiagnosticMarkup(){
+    const x=state.ynisonDiagnostic;
+    const last=x?.last_diagnostic;
+    const outcomes={ok:"Подтверждено состояние с текущим треком",no_data:"Получено состояние без текущего трека",error:"Ошибка диагностики",timeout:"Истекло время ожидания",unknown:"Результат не определён"};
+    const names={python:"Python · MarshalX",javascript:"JavaScript · wire"};
+    const title=x?.unavailable?"Данные ручной диагностики недоступны":last?(outcomes[last.outcome]||"Результат не определён"):"Новый ручной результат пока не опубликован";
+    return '<div class="detail-stat ynison-diagnostic"><span>Последняя ручная диагностика · отдельный результат</span><strong>'+esc(title)+'</strong>'+
+      (last?'<p>'+esc(names[last.client]||"Клиент")+' · '+esc(fmtDate(last.checked_at))+'</p>':"")+
+      (x?.retry_after_at?'<p>Следующая попытка не раньше '+esc(fmtDate(x.retry_after_at))+'</p>':"")+
+      '<p>Автоматическая проверка выключена. Результат относится к конкретному аккаунту и времени, а не ко всему сервису.</p></div>';
   }
   function closeModal() {
     const id=state.modal;
@@ -352,7 +372,7 @@
       stat("Тип проверки",c.kind==="tcp_tls"?"TLS":c.kind.startsWith("music_")?"API":c.kind==="requires_key"?"Нужен ключ":"HTTP")+'</div>'+
       '<div class="detail-disclaimer">«Отвечает» означает успешный ответ <b>данной пробы</b> из сети GitHub Actions. Это не гарантия корректной работы всех функций сервиса для всех пользователей.'+
       (result.note?'<br><br>'+esc(result.note):'')+'</div>'+
-      (c.id==="music-ynison"?'<div class="detail-disclaimer"><b>Дополнительная диагностика</b><br>Ручная диагностика Python или JavaScript через GitHub Actions. Автоматическая проба приостановлена; запуск возможен только после проверки общей серверной паузы. Результат доступен в Summary workflow.</div><a class="detail-link" target="_blank" rel="noopener noreferrer" href="https://github.com/Okelii77/yandex-pulse/actions/workflows/ynison-diagnostic.yml">Запустить независимую проверку ↗</a><br>':"")+ 
+      (c.id==="music-ynison"?ynisonDiagnosticMarkup()+'<div class="detail-disclaimer"><b>Дополнительная диагностика</b><br>Ручная диагностика Python или JavaScript через GitHub Actions. Автоматическая проба приостановлена; запуск возможен только после проверки общей серверной паузы. Результат доступен в Summary workflow.</div><a class="detail-link" target="_blank" rel="noopener noreferrer" href="https://github.com/Okelii77/yandex-pulse/actions/workflows/ynison-diagnostic.yml">Запустить независимую проверку ↗</a><br>':"")+ 
       (c.id==="music-ynison"?'<a class="detail-link" target="_blank" rel="noopener noreferrer" href="ynison-audit.html">Сравнить протокол с официальным веб-плеером ↗</a><br>':"")+ 
       (c.url && c.url.startsWith("https://")?'<a class="detail-link" target="_blank" rel="noopener noreferrer" href="'+esc(c.url)+'">Открыть проверяемый адрес ↗</a>':'');
     if(focusedRange)$("#modal-body").querySelector('[data-range="'+CSS.escape(focusedRange)+'"]')?.focus({preventScroll:true});

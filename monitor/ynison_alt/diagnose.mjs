@@ -8,7 +8,7 @@ const started=Date.now();
 async function gate(path,body){
   const url=new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
   url.searchParams.set("audience","yandex-pulse-ynison");
-  const oidc=await fetch(url,{headers:{Authorization:"Bearer "+process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN},signal:AbortSignal.timeout(8000)});
+  const oidc=await fetch(url,{headers:{Authorization:"Bearer "+process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN},signal:AbortSignal.timeout(8000),redirect:"error"});
   if(!oidc.ok)throw Error("oidc");
   const {value}=await oidc.json();
   if(typeof value!=="string"||!value)throw Error("oidc");
@@ -29,18 +29,20 @@ function exchange(url,token,protocol,hello,accept,stage){
         headers:{Origin:"https://music.yandex.ru",Authorization:"OAuth "+token},
         followRedirects:false,handshakeTimeout:8000,maxPayload:8*1024*1024
       });
-      timer=setTimeout(()=>finish({status:"timeout",stage}),12000);
+      timer=setTimeout(()=>finish({status:"unknown",stage}),12000);
       ws.on("open",()=>{if(hello)try{ws.send(JSON.stringify(hello));}catch{finish({status:"unknown",stage});}});
       ws.on("unexpected-response",(_req,res)=>{res.destroy();finish(safeHandshakeError(res.statusCode,res.headers,stage));});
       ws.on("error",()=>finish({status:"unknown",stage}));
-      ws.on("close",()=>finish({status:"error",stage}));
+      ws.on("close",()=>finish({status:"unknown",stage}));
       ws.on("message",(raw,binary)=>{
         if(binary||done)return;
         let frame;
         try{frame=JSON.parse(raw.toString());}catch{return;}
-        if(frame?.error){finish(safeServerError(frame.error));return;}
-        const accepted=accept(frame);
-        if(accepted)finish(accepted);
+        if(frame&&typeof frame==="object"&&Object.hasOwn(frame,"error")){
+          finish(frame.error&&typeof frame.error==="object"?safeServerError(frame.error):{status:"unknown",stage});return;
+        }
+        try{const accepted=accept(frame);if(accepted)finish(accepted);}
+        catch{finish({status:"unknown",stage});}
       });
     }catch{finish({status:"unknown",stage});}
   });
@@ -51,7 +53,7 @@ async function probe(token){
   const protocol={"Ynison-Device-Id":id,"Ynison-Device-Info":JSON.stringify({app_name:"Yandex Pulse",type:"1"})};
   const redirect=await exchange("wss://ynison.music.yandex.ru/redirector.YnisonRedirectService/GetRedirectToYnison",token,protocol,null,f=>{
     const ticket=f?.redirect_ticket??f?.redirectTicket, session=f?.session_id??f?.sessionId;
-    if(!validRedirectHost(f?.host)||typeof ticket!=="string"||!ticket||!/^\d+$/.test(String(session)))return {status:"error",stage:"invalid_redirect"};
+    if(!validRedirectHost(f?.host)||typeof ticket!=="string"||!ticket||!/^[1-9]\d*$/.test(String(session)))return {status:"error",stage:"invalid_redirect"};
     return {host:f.host,ticket,session:String(session)};
   },"redirector");
   if(redirect.status)return redirect;

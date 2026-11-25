@@ -8,6 +8,7 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 API = "https://yandex-pulse-api.oleg-pulse-03.workers.dev"
 HOST = re.compile(r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+yandex\.(?:ru|net)(?::443)?", re.I)
@@ -74,12 +75,93 @@ def gate(path, body):
     except urllib.error.HTTPError as exc:
         return exc.code, json.loads(exc.read(8192))
 
+def safe_server_error(error):
+    result = {"status":"error", "stage":"server"}
+    if not isinstance(error, dict):
+        return {"status":"unknown", "stage":"server"}
+    details = [x for x in (error.get("details"), error.get("extra_headers")) if isinstance(x, dict)]
+    for name, value in (("http_code",error.get("http_code")),("grpc_code",error.get("grpc_code"))):
+        n = integer(value)
+        if n is not None and 0 <= n < 10**10:
+            result[name] = n
+    for headers in details:
+        code = integer(headers.get("ynison-error-code"))
+        if code is not None and 0 <= code < 10**10:
+            result["error_code"] = code
+        if "ynison-go-away-for-seconds" in headers:
+            add_retry(result, headers["ynison-go-away-for-seconds"])
+    return result
+
+def add_retry(result, value):
+    n = integer(value)
+    if n is None or not 0 <= n <= 315360000:
+        result["status"] = "unknown"
+    elif n > 0:
+        result["retry_after_seconds"] = max(n, result.get("retry_after_seconds",0))
+
+def safe_exception(exc):
+    result = {"status":"unknown","stage":"client"}
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        for key in ("http_code","grpc_code","error_code"):
+            n = integer(getattr(exc,key,None))
+            if n is not None and 0 <= n < 10**10:
+                result[key] = n
+        away = getattr(exc,"go_away_seconds",None)
+        if away is not None:
+            add_retry(result, away)
+        response = getattr(exc,"response",None)
+        status = integer(getattr(response,"status_code",None))
+        if status is not None and 100 <= status <= 599:
+            result["http_code"] = status
+        headers = getattr(response,"headers",None)
+        if headers is not None:
+            for key in ("ynison-go-away-for-seconds","retry-after"):
+                try:
+                    values = headers.get_all(key) if hasattr(headers,"get_all") else [headers.get(key)]
+                except Exception:
+                    values = [None]
+                for value in values:
+                    if value is None:
+                        continue
+                    if key == "retry-after" and integer(value) is None:
+                        try:
+                            value = max(0, int((parsedate_to_datetime(value)-datetime.now(timezone.utc)).total_seconds())+1)
+                        except Exception:
+                            pass
+                    add_retry(result,value)
+        exc = getattr(exc,"__cause__",None) or getattr(exc,"__context__",None)
+    # Unknown transport failures retain the conservative 24-hour pause.
+    return result
+
 def probe(token):
     from yandex_music.ynison.client import YnisonClient
     from yandex_music.exceptions import YnisonError
     logging.disable(logging.CRITICAL)
     class GuardedClient(YnisonClient):
         verified = None
+        server_report = None
+        def _load_frame(self, message):
+            try:
+                raw = json.loads(message)
+            except (TypeError, ValueError):
+                raise YnisonError("invalid JSON") from None
+            if isinstance(raw, dict) and "error" in raw:
+                self.server_report = safe_server_error(raw["error"])
+                raise YnisonError("server error")
+            return super()._load_frame(message)
+        def _dispatch(self, message):
+            # Abort on an error frame, even if the SDK considers it recoverable.
+            try:
+                raw = json.loads(message)
+            except (TypeError, ValueError):
+                return
+            if isinstance(raw,dict) and "error" in raw:
+                self.server_report = safe_server_error(raw["error"])
+                raise YnisonError("server error")
+            if classify_state(raw) is not None:
+                super()._dispatch(message)
         def _parse_redirect_frame(self, message):
             result = super()._parse_redirect_frame(message)
             if not valid_host(result.host):
@@ -100,22 +182,7 @@ def probe(token):
         with client.session(timeout=20):
             return {"status":client.verified or "unknown","stage":"validated_raw_state" if client.verified else "state"}
     except Exception as exc:
-        result = {"status":"error","stage":"client"}
-        for key in ("http_code","grpc_code","error_code"):
-            value = integer(getattr(exc,key,None))
-            if value is not None and 0 <= value < 10**10:
-                result[key] = value
-        away = getattr(exc,"go_away_seconds",None)
-        if away is not None:
-            n = integer(away)
-            if n is not None and 0 < n <= 315360000:
-                result["retry_after_seconds"] = n
-            elif away != 0:
-                result["status"] = "unknown"
-        # No log of exception text. Unknown transport/cleanup is conservative.
-        if "retry_after_seconds" not in result and not any(k in result for k in ("http_code","grpc_code","error_code")):
-            result["status"] = "unknown"
-        return result
+        return client.server_report or safe_exception(exc)
 
 def run():
     token = os.environ.get("YANDEX_MUSIC_TOKEN","").strip()

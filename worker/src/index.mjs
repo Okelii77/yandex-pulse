@@ -1,4 +1,4 @@
-import { acquireYnison, finishYnison } from "./ynison-gate.mjs";
+import { acquireYnison, finishYnison, publicYnisonStatus } from "./ynison-gate.mjs";
 /*
  * Yandex Pulse API — Cloudflare Workers + D1.
  * Open status and history, authenticated ingestion, Turnstile-protected manual
@@ -261,6 +261,8 @@ export default {
         return data ? json(data,200,cors) : json({error:"waiting_for_first_probe"},503,cors);
       }
       if(url.pathname==="/api/history" && request.method==="GET")return await historyResponse(request,env,cors,ctx);
+      if(request.method==="GET" && url.pathname==="/api/ynison/status")
+        return json(await publicYnisonStatus(env.DB),200,cors);
       if(request.method==="POST" && ["/api/ynison/acquire","/api/ynison/finish"].includes(url.pathname)){
         const auth=request.headers.get("Authorization")||"";
         if(!auth.startsWith("Bearer ") || !await githubOidcValid(auth.slice(7),"yandex-pulse-ynison","ynison-diagnostic.yml"))

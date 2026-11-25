@@ -124,5 +124,5 @@
       state.textContent="Cloudflare Turnstile сейчас недоступен.";
     }
   }
-  window.PulseLive={enabled,canTrigger:()=>enabled()&&!!key&&triggerReady,refreshCapabilities,snapshot,trigger};
+  window.PulseLive={enabled,canTrigger:()=>enabled()&&!!key&&triggerReady,refreshCapabilities,snapshot,ynisonStatus:()=>read("/api/ynison/status"),trigger};
 })();
