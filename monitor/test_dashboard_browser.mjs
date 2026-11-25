@@ -60,7 +60,14 @@ try{
     return r.result.value;
   };
   await send("Page.enable");await send("Runtime.enable");await send("Log.enable");
-  const wait=expression=>until(()=>evalJS(expression),expression);
+  const wait=async expression=>{
+    try{return await until(()=>evalJS(expression),expression);}
+    catch(e){
+      console.log("Browser diagnostic:",JSON.stringify({errors,document:await evalJS("({url:location.href,title:document.title,ready:document.readyState,text:document.body?.innerText?.slice(0,900)})").catch(()=>null)}));
+      await shot("failure").catch(()=>{});
+      throw e;
+    }
+  };
   const click=selector=>evalJS("document.querySelector("+JSON.stringify(selector)+").click()");
   const shot=async name=>{const r=await send("Page.captureScreenshot",{format:"png"});await writeFile(join(out,name+".png"),Buffer.from(r.data,"base64"));};
   for(const [name,width,height] of [["desktop",1440,900],["mobile",390,844]]){
