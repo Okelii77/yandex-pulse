@@ -45,13 +45,16 @@ jobs:
         run: |
           python -m compileall -q monitor
           python -m unittest discover -s monitor -p "test_*.py" -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Validate web chart behavior
         run: |
           node --check site/app.js
           node monitor/test_graph.cjs
           node --check site/live-api.js
           node --check monitor/ynison_alt/diagnose.mjs
-          node --test monitor/ynison_alt/state-confirmation.test.mjs
+          node --test monitor/test_live_api.cjs monitor/test_dashboard.cjs monitor/ynison_alt/*.test.mjs
           node --test monitor/ynison_alt/test-har-core.mjs
           node --test worker/test/*.test.mjs
       - name: Verify Cloudflare manual-trigger readiness

@@ -2,9 +2,16 @@ name: Yandex Pulse · Ynison independent diagnostic
 
 on:
   workflow_dispatch:
+    inputs:
+      client:
+        description: 'Select one client; the shared gate applies to both'
+        type: choice
+        options: [javascript, python]
+        default: javascript
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: pulse-ynison-comparison
@@ -12,7 +19,8 @@ concurrency:
 
 jobs:
   diagnose:
-    name: Independent JS client (read-only)
+    name: Independent diagnostic (guarded)
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -20,12 +28,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install independent SDK without install scripts
+      - name: Install JS transport without install scripts
+        if: inputs.client == 'javascript'
         run: npm install --prefix monitor/ynison_alt --ignore-scripts --no-audit --no-fund
+      - uses: actions/setup-python@v5
+        if: inputs.client == 'python'
+        with:
+          python-version: '3.12'
+      - name: Install pinned Python SDK
+        if: inputs.client == 'python'
+        run: python -m pip install 'yandex-music[ynison]==3.2.2'
       - name: Diagnose with server go-away protection
         env:
           YANDEX_MUSIC_TOKEN: ${{ secrets.YANDEX_MUSIC_TOKEN }}
-        run: node monitor/ynison_alt/diagnose.mjs
+          PULSE_DIAGNOSTIC_CLIENT: ${{ inputs.client }}
+        run: |
+          if [ "$PULSE_DIAGNOSTIC_CLIENT" = python ]; then
+            python monitor/ynison_alt/diagnose.py
+          else
+            node monitor/ynison_alt/diagnose.mjs
+          fi
       - name: Publish sanitized result artifact
         if: always()
         uses: actions/upload-artifact@v4

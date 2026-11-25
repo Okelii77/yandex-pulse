@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 :root{
   color-scheme: dark;
   --bg:#111214;--page:#111214;--surface:#1a1b1e;--surface2:#202124;--surface3:#27282c;
@@ -273,3 +272,75 @@ button:focus-visible,a:focus-visible,input:focus-visible,[tabindex]:focus-visibl
 .pulse-trigger-panel .pulse-trigger-state{margin-top:20px;min-height:20px;font-size:11px}
 .pulse-trigger-panel .pulse-trigger-close{position:absolute;top:16px;right:16px;border:0;background:var(--surface3);color:var(--text);width:38px;height:38px;border-radius:11px;font-size:23px}
 #pulse-turnstile-container{margin-top:23px;max-width:100%}
+
+/* Operational dashboard refinements — compact, readable, without a UI framework. */
+:root{--subtle:#a1a3ab;--ring:rgba(255,218,52,.68)}
+html[data-theme="light"]{--subtle:#666970;--ring:rgba(126,97,0,.65)}
+.skip-link{position:fixed;z-index:200;top:8px;left:12px;padding:12px 18px;border-radius:8px;background:var(--accent);color:var(--on-accent);transform:translateY(-150%)}
+.skip-link:focus{transform:none}
+.hero{min-height:242px;align-items:center}
+.hero-copy{padding:clamp(24px,3vw,42px);width:70%}
+.hero h1{font-size:clamp(32px,3.4vw,52px);margin:12px 0 10px;letter-spacing:-1.9px}
+.hero p{font-size:13px;line-height:1.65}
+.hero-actions{margin-top:16px}
+.hero-action-primary{border:0;min-height:44px}
+.hero-art{transform:translateY(-50%) scale(.72);right:-4%}
+.data-health{display:flex;align-items:center;gap:12px;padding:13px 16px;margin-top:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
+.data-health>div{flex:1;min-width:0}
+.data-health strong,.data-health div>span{display:block}
+.data-health strong{font-size:13px}
+.data-health div>span{font-size:11px;color:var(--muted);margin-top:2px}
+.data-health-dot{width:9px;height:9px;border-radius:50%;background:var(--subtle);flex-shrink:0}
+.data-health[data-state="ok"] .data-health-dot{background:var(--green);box-shadow:0 0 0 4px var(--green-bg)}
+.data-health[data-state="warning"] .data-health-dot{background:var(--amber);box-shadow:0 0 0 4px var(--amber-bg)}
+.data-health-source{font-size:11px;color:var(--muted);text-align:right}
+.metric-card{min-height:120px;padding:17px 20px}
+.metric-value,.summary-number,.mini-latency,.nav-count,.metric-footer{font-variant-numeric:tabular-nums}
+.metric-top,.metric-footer{font-size:12px}
+.dashboard-grid{margin-top:30px}
+.group-label{margin:14px 0 3px;font-size:11px;letter-spacing:1px;font-weight:800;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.results-meta{font-size:12px;color:var(--muted);min-height:18px;margin:0 0 9px}
+.filter-bar{margin-bottom:8px;flex-wrap:wrap}
+.filter-options{flex-wrap:wrap;gap:10px 18px}
+.filter{font-size:12px;min-height:44px;padding:0 0 11px}
+.filter span{font-variant-numeric:tabular-nums;font-size:11px}
+.service-card{min-height:84px;padding:14px 16px}
+.service-desc{overflow-wrap:anywhere}
+.service-name,.service-sub,.service-category{display:block}
+.service-name{font-size:14px}
+.service-sub{font-size:12px;margin-top:4px}
+.service-category{font-size:10px}
+.service-right{gap:12px}
+.badge{font-size:11px;min-width:100px}
+.search-box input{font-size:13px}
+.search-box{min-height:44px}
+.panel-subtitle,.summary-caption,.event b,.event small,.empty-mini,.detail-stat span,.detail-disclaimer,.modal-time,.under-list-note{font-size:12px}
+.empty-state{display:flex;flex-direction:column;justify-content:center;gap:8px}
+.empty-state strong{color:var(--text);font-size:15px}
+.reset-filters{padding:9px 16px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-weight:700;min-height:44px}
+.range-btn,.modal-close,.icon-button{min-height:44px;min-width:44px}
+.detail-modal{overscroll-behavior:contain}
+.detail-link{overflow-wrap:anywhere;line-height:1.6}
+#services-heading{scroll-margin-top:18px}
+@media(min-width:781px) and (max-width:1100px){.hero-copy{width:75%}.hero-art{right:-15%}}
+@media(max-width:780px){
+ .hero{min-height:0}.hero-copy{width:100%;padding:22px 24px}.hero h1{font-size:clamp(30px,6vw,42px);margin:10px 0}.hero p{max-width:100%;font-size:13px}.hero-art{opacity:.1;right:-180px;top:55%;transform:translateY(-50%) scale(.65)}
+ .topbar-right{gap:6px}.topbar-check{max-width:105px;font-size:10px}.icon-button{width:44px;height:44px}
+ .metrics-grid{gap:8px}.metric-card{min-height:100px;padding:13px 14px}.metric-value{font-size:30px;margin-top:7px}.metric-footer{font-size:11px}
+ .mobile-tab{font-size:12px;min-height:44px}
+ .service-card{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:9px;min-height:84px;padding:12px}
+ .service-right{flex-direction:column;align-items:flex-end;gap:4px;min-width:0}.mini-latency{display:block;font-size:11px;width:auto}
+ .badge{min-width:0;font-size:10px;padding:6px 9px}.service-icon{width:36px;height:36px}
+ .dashboard-grid{margin-top:18px}.section-heading h2{font-size:23px}.filter-options{gap:6px 12px}
+ .data-health{padding:11px 12px}.data-health-source{max-width:85px}
+}
+@media(max-width:480px){
+ .hero-copy{padding:20px}.hero-pill{font-size:8px;letter-spacing:.8px}.hero h1{font-size:32px}
+ .topbar-check{display:none}
+ .metric-top{font-size:11px}.metric-footer{font-size:11px}
+ .filter-options{justify-content:flex-start;gap:7px 13px}.filter{font-size:11px}
+ .service-name{font-size:13px}.service-sub{font-size:11px}
+ .data-health-source{display:none}
+ .detail-modal{max-height:92dvh}.modal-inner{padding-bottom:max(26px,env(safe-area-inset-bottom))}
+ .pulse-trigger-panel{padding:24px 16px}.pulse-trigger-panel h2{font-size:22px}
+}

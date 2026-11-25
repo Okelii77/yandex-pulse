@@ -113,35 +113,20 @@ def optional_music_probe(check: dict, token: str, previous: dict) -> dict:
         return result(check, "not_configured", reason="YANDEX_MUSIC_TOKEN не задан")
 
     if check["kind"] == "music_ynison":
-        # During independent JS comparison do not send any Python Ynison
-        # connection attempts. Retain the server-requested expiry so the
-        # separate manual diagnostic can safely honour it.
-        if os.environ.get("PULSE_YNISON_AUTOPROBE", "1").strip() == "0":
-            retry_at = from_iso(previous.get("retry_after_at"))
-            extras = {"reason": "Автоматическая проверка приостановлена для независимого теста"}
-            if retry_at:
-                extras["retry_after_at"] = iso(retry_at)
-            return result(check, "disabled", **extras)
-
-        # A remote go-away request persists across scheduled workflow runs.
+        # Scheduled probes must never bypass the shared manual diagnostic gate.
         retry_at = from_iso(previous.get("retry_after_at"))
-        if retry_at and utc_now() < retry_at:
-            return result(check, "cooldown", reason="Соблюдаем паузу Ynison", retry_after_at=iso(retry_at),
+        extras = {"reason": "Ynison: только защищённая ручная диагностика"}
+        if retry_at:
+            extras["retry_after_at"] = iso(retry_at)
+        if retry_at and utc_now() < retry_at and os.environ.get("PULSE_YNISON_AUTOPROBE", "0").strip() != "0":
+            return result(check, "cooldown", retry_after_at=iso(retry_at),
                           last_http_code=previous.get("http_code"),
                           last_error_code=previous.get("error_code"))
+        return result(check, "disabled", **extras)
 
     started = time.monotonic()
     try:
         from yandex_music import Client
-
-        if check["kind"] == "music_ynison":
-            from yandex_music.ynison import simple
-            state = simple.get_state(token, timeout=12)
-            elapsed = int((time.monotonic() - started) * 1000)
-            active = getattr(state, "active_device_id_optional", None)
-            # Never serialize track IDs, device IDs or user details.
-            return result(check, "ok" if active else "no_data", elapsed,
-                          note="Состояние получено" if active else "Активное устройство не найдено")
 
         client = Client(token).init()
         if check["kind"] == "music_rest":
@@ -162,17 +147,6 @@ def optional_music_probe(check: dict, token: str, previous: dict) -> dict:
     except Exception as exc:
         elapsed = int((time.monotonic() - started) * 1000)
         safe = {"reason": type(exc).__name__[:80]}
-        if check["kind"] == "music_ynison":
-            for key in ("http_code", "grpc_code", "error_code"):
-                value = getattr(exc, key, None)
-                # Only small integral error codes, no verbose server text.
-                if isinstance(value, int):
-                    safe[key] = value
-                elif isinstance(value, str) and value.isdigit() and len(value) < 12:
-                    safe[key] = int(value)
-            go_away = getattr(exc, "go_away_seconds", 0)
-            if isinstance(go_away, int) and 0 < go_away <= 86400:
-                safe["retry_after_at"] = iso(utc_now() + dt.timedelta(seconds=go_away))
         return result(check, "down", elapsed, **safe)
 
 

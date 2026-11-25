@@ -189,3 +189,7 @@ GitHub Pages: статический HTML/CSS/JS
 
 **Кнопка запуска непосредственно на публичном сайте** требует дополнительного защищённого backend (например, Cloudflare Worker с GitHub App и ограничением частоты). **Не храните GitHub PAT в JavaScript или в файлах GitHub Pages.**
 
+
+## Guarded Ynison diagnostics and history caching
+
+See [safety rollout](docs/ynison-safety-rollout.md) before deploying the new Worker and migration. Both manual clients use a shared D1 lease; automatic Ynison checks remain disabled. The independent JS wire client validates raw frames, while Python uses pinned MarshalX 3.2.2. Public history is cached by snapshot revision for up to 120 seconds; the current snapshot and gate remain uncached. Offline CI tests the migration and SQL against SQLite. Production deployment and live validation are separate steps.

@@ -9,7 +9,7 @@
     degraded: ["Ограничено", "Сервер ответил, но работоспособность функции не подтверждена"],
     no_data: ["Нет данных", "API ответил без подходящих данных"],
     not_configured: ["Не настроено", "Для проверки требуются дополнительные права или токен"],
-    disabled: ["Выключено", "Платная проверка доступна только после явного включения"],
+    disabled: ["Выключено", "Проверка временно приостановлена или требует явного включения"],
     cooldown: ["Пауза", "Сервер запросил паузу до следующей проверки"],
     unknown: ["Неизвестно", "Статус нельзя определить"],
   };
@@ -33,7 +33,7 @@
     ["other","Другие сервисы","layers"]
   ].map(([id,title,icon]) => ({id,title,icon,description:"Проверки сервиса"}));
 
-  const state = {data:null, history:null, category:"overview", filter:"all", query:"", modal:null, range:24, loading:false, source:"legacy"};
+  const state = {data:null, history:null, category:"overview", filter:"all", query:"", modal:null, range:24, loading:false, source:"legacy",historyFresh:false};
   const icon = key => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (PATHS[key] || PATHS.layers) + '</svg>';
   const esc = x => String(x == null ? "" : x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
   const cats = () => state.data?.categories || FALLBACK_CATEGORIES;
@@ -60,7 +60,7 @@
   const badge = name => '<span class="badge ' + esc(name) + '"><span class="badge-dot"></span>' +
     esc((STATES[name] || STATES.unknown)[0]) + '</span>';
   const nav = (id,title,ico,num) =>
-    '<a href="#/' + esc(id === "overview" ? "" : id) + '" class="nav-item' + (state.category===id ? " active" : "") + '">' +
+    '<a href="#/' + esc(id === "overview" ? "" : id) + '" class="nav-item' + (state.category===id ? " active" : "") + '"'+(state.category===id?' aria-current="page"':'')+'>' +
       '<span class="nav-icon">' + icon(ico) + '</span><span>' + esc(title) + '</span>' +
       (num ? '<span class="nav-count">' + num + '</span>' : "") + '</a>';
 
@@ -68,8 +68,18 @@
     $("#side-nav").innerHTML = nav("overview","Общий обзор","overview") +
       '<div class="nav-group-title">ЭКОСИСТЕМА</div>' +
       cats().map(c=>nav(c.id,c.title,c.icon,checks().filter(x=>x.category===c.id).length)).join("");
-    $("#mobile-categories").innerHTML = '<a href="#/" class="mobile-tab' + (state.category==="overview"?" active":"") + '">Обзор</a>' +
-      cats().map(c=>'<a href="#/'+esc(c.id)+'" class="mobile-tab'+(state.category===c.id?" active":"")+'">'+esc(c.title)+'</a>').join("");
+    $("#mobile-categories").innerHTML = '<a href="#/" class="mobile-tab' + (state.category==="overview"?" active":"") + '"'+(state.category==="overview"?' aria-current="page"':'')+'>Обзор</a>' +
+      cats().map(c=>'<a href="#/'+esc(c.id)+'" class="mobile-tab'+(state.category===c.id?" active":"")+'"'+(state.category===c.id?' aria-current="page"':'')+'>'+esc(c.title)+'</a>').join("");
+  }
+  function describeData(data,source,now,historyFresh){
+    const stamp=Date.parse(data?.generated_at);
+    const valid=Number.isFinite(stamp);
+    const outdated=valid && now-stamp>Math.max(90,(data.interval_minutes||30)*2.5)*60000;
+    const origin=source==="live"?"Cloudflare D1":source==="archive"||source==="last_known"?"Резервные данные":"GitHub Pages";
+    if(!valid)return {kind:"waiting",title:"Ожидаем измерения",detail:"Последняя проверка ещё не получена",source:origin};
+    if(source==="archive"||source==="last_known")return {kind:"warning",title:"Показаны сохранённые данные",detail:"Live API недоступен · "+(outdated?"снимок устарел":"снимок не подтверждён как актуальный"),source:origin};
+    if(outdated)return {kind:"warning",title:"Данные устарели",detail:"Последняя проверка старше ожидаемого интервала",source:origin};
+    return {kind:source==="live"?"ok":"neutral",title:source==="live"?"Данные получены из Live API":"Опубликованный снимок",detail:source==="live"&&!historyFresh?"Статусы доступны · история загружается или недоступна":"Последняя опубликованная проверка · не официальный статус Яндекса",source:origin};
   }
   function renderHero() {
     const current = cat(state.category);
@@ -83,9 +93,14 @@
     $("#category-intro").hidden = !current;
     if (current) $("#category-intro").innerHTML = '<div><b>'+esc(current.title)+'</b><p>'+esc(current.description)+'</p></div><strong>'+checks().filter(x=>x.category===current.id).length+' проверок</strong>';
     $("#last-updated").textContent = state.data?.generated_at ? 'Последняя проверка: '+fmtDate(state.data.generated_at) : 'Данных о последней проверке пока нет';
+    const health=$("#data-health"), copy=describeData(state.data,state.source,Date.now(),state.historyFresh);
+    health.dataset.state=copy.kind;
+    health.querySelector("strong").textContent=copy.title;
+    health.querySelector("div > span").textContent=copy.detail;
+    health.querySelector(".data-health-source").textContent=copy.source;
     const check = $("#topbar-check"), dot = $(".status-ping",check);
-    if (state.source === "archive" && window.PulseLive?.enabled()) {
-      check.lastChild.textContent = " API недоступен · архив";
+    if (["archive","last_known"].includes(state.source) && window.PulseLive?.enabled()) {
+      check.lastChild.textContent = " API недоступен";
       dot.className = "status-ping is-error";
       return;
     }
@@ -101,14 +116,19 @@
     }
   }
   function renderStats() {
-    const arr = state.data?.results || [];
+    const ids=new Set(checks().filter(c=>state.category==="overview"||c.category===state.category).map(c=>c.id));
+    const arr = (state.data?.results || []).filter(r=>ids.has(r.id));
     const vals = arr.map(x=>x.latency_ms).filter(Number.isFinite);
     const mean = vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : null;
     const value = [arr.length || "—", arr.filter(x=>x.status==="ok").length, arr.filter(x=>x.status==="down").length, mean == null ? "—" : mean];
     $$(".metric-value").forEach((x,i)=>x.textContent = arr.length ? value[i] : "—");
     const others = arr.filter(x=>!["ok","down"].includes(x.status)).length;
-    $$(".metric-footer")[0].textContent = others ? others+' требуют уточнения статуса' : 'В конфигурации';
-    $("#all-count").textContent = arr.length || "—";
+    $$(".metric-footer")[0].textContent = arr.length ? others+' прочих статусов' : 'В конфигурации';
+    const counts={all:arr.length,ok:arr.filter(x=>x.status==="ok").length,down:arr.filter(x=>x.status==="down").length,other:others};
+    $$("#status-filters .filter").forEach(button=>{
+      button.querySelector("span").textContent=state.data?counts[button.dataset.filter]:"—";
+      button.setAttribute("aria-pressed",String(state.filter===button.dataset.filter));
+    });
   }
   function bars(id) {
     const recent = hist(id).slice(-20);
@@ -118,7 +138,7 @@
   }
   function serviceCard(check,row) {
     const status = row?.status || "unknown";
-    return '<button type="button" class="service-card" data-check="'+esc(check.id)+'" aria-label="Подробнее: '+esc(check.name)+'">' +
+    return '<button type="button" class="service-card" data-check="'+esc(check.id)+'" aria-label="Подробнее: '+esc(check.name)+' · '+esc((STATES[status]||STATES.unknown)[0])+'">' +
       '<span class="service-icon">'+icon(cat(check.category)?.icon)+'</span>' +
       '<span class="service-desc"><span class="service-name">'+esc(check.name)+'</span><span class="service-sub">'+esc(check.detail)+'</span>' +
       (state.category==="overview"?'<span class="service-category">'+esc(cat(check.category)?.title || "")+'</span>':"") +
@@ -126,31 +146,35 @@
       badge(status)+'<span class="card-arrow" aria-hidden="true">›</span></span></button>';
   }
   function renderChecks() {
+    const focused=document.activeElement?.closest?.("[data-check]")?.dataset.check;
     const rowMap = results();
     const chosen = checks().filter(c=>
       (state.category==="overview" || c.category===state.category) &&
       (state.filter==="all" || (state.filter==="other" ? !["ok","down"].includes(rowMap.get(c.id)?.status) : state.filter===rowMap.get(c.id)?.status)) &&
       (c.name+" "+c.detail+" "+(cat(c.category)?.title||"")).toLocaleLowerCase("ru-RU").includes(state.query.toLocaleLowerCase("ru-RU"))
     );
+    $("#results-meta").textContent=state.data?"Показано "+chosen.length+" из "+checks().filter(c=>state.category==="overview"||c.category===state.category).length+" проверок":"";
     if (!state.data) {
       $("#service-list").innerHTML = '<div class="empty-state">Ожидаем первую публикацию проверок GitHub Actions.<br>После запуска здесь появятся реальные статусы.</div>';
       return;
     }
     if (!chosen.length) {
-      $("#service-list").innerHTML = '<div class="empty-state">Ничего не найдено. Измени фильтр или поисковый запрос.</div>';
+      $("#service-list").innerHTML = '<div class="empty-state"><strong>Ничего не найдено</strong><span>Измените поиск или фильтр статусов.</span><button class="reset-filters" type="button">Сбросить фильтры</button></div>';
       return;
     }
     if (state.category!=="overview") {
       $("#service-list").innerHTML = chosen.map(x=>serviceCard(x,rowMap.get(x.id))).join("");
+      if(focused)document.querySelector('[data-check="'+CSS.escape(focused)+'"]')?.focus({preventScroll:true});
       return;
     }
     $("#service-list").innerHTML = cats().map(c=>{
       const group = chosen.filter(x=>x.category===c.id);
       return group.length ?
-        '<div class="group-label" style="margin:18px 0 10px;font-size:10px;letter-spacing:1.3px;font-weight:850;color:var(--subtle);display:flex;justify-content:space-between">'+
+        '<div class="group-label">'+
         esc(c.title.toUpperCase())+' <span>'+group.length+' / '+checks().filter(x=>x.category===c.id).length+'</span></div>'+
         group.map(x=>serviceCard(x,rowMap.get(x.id))).join("") : "";
     }).join("");
+    if(focused)document.querySelector('[data-check="'+CSS.escape(focused)+'"]')?.focus({preventScroll:true});
   }
   function renderHistorySummary() {
     const cutoff=Date.now()-86400000;
@@ -167,18 +191,22 @@
     $("#activity-summary").innerHTML='<div class="summary-number">'+(percent ?? "—")+'<small>'+(percent===null?"":"%")+'</small></div>'+
       '<div class="summary-caption">'+(comparable.length?success+' из '+comparable.length+' успешных проб':'Пока нет измерений за 24 часа')+'</div>'+
       '<div class="availability-bars">'+histogram+'</div>';
+    if(state.source==="live" && state.historyFresh===false){
+      const caption=$(".summary-caption");
+      if(caption)caption.textContent += " · История обновляется или временно недоступна";
+    }
     const events=[];
     for (const chk of checks()) {
       const points=state.history?.series?.[chk.id]||[];
       for (let i=1;i<points.length;i++) {
-        if (points[i][1]!==points[i-1][1]) events.push({name:chk.name,time:points[i][0],status:points[i][1]});
+        if (Date.parse(points[i][0])>=cutoff && points[i][1]!==points[i-1][1]) events.push({name:chk.name,time:points[i][0],status:points[i][1]});
       }
     }
     events.sort((a,b)=>new Date(b.time)-new Date(a.time));
     $("#events-list").innerHTML=events.length?events.slice(0,6).map(x=>
       '<div class="event"><span class="event-dot '+esc(x.status)+'"></span><div><b>'+esc(x.name)+' · '+esc(STATES[x.status]?.[0]||x.status)+
       '</b><small>'+esc(fmtDate(x.time,true))+'</small></div></div>').join("") :
-      '<div class="empty-mini">Изменений статусов пока не зафиксировано.</div>';
+      '<div class="empty-mini">'+(state.historyFresh===false&&state.source==="live"?"История пока недоступна.":"Изменений за последние 24 часа не зафиксировано.")+'</div>';
   }
   function render() {
     renderNavigation();renderHero();renderStats();renderChecks();renderHistorySummary();
@@ -277,18 +305,42 @@
     state.range=24;
     renderModal();
     $("#modal-backdrop").hidden=false;
+    $(".app-shell").inert=true;
     document.body.style.overflow="hidden";
     $("#modal-close").focus();
+    if(id==="music-ynison")loadYnisonDiagnostic();
+  }
+  async function loadYnisonDiagnostic(){
+    const current=state.modal;
+    if(!window.PulseLive?.enabled())return;
+    state.ynisonDiagnostic=null;
+    try{state.ynisonDiagnostic=await window.PulseLive.ynisonStatus();}
+    catch{state.ynisonDiagnostic={unavailable:true};}
+    if(state.modal===current&&current==="music-ynison")renderModal();
+  }
+  function ynisonDiagnosticMarkup(){
+    const x=state.ynisonDiagnostic;
+    const last=x?.last_diagnostic;
+    const outcomes={ok:"Подтверждено состояние с текущим треком",no_data:"Получено состояние без текущего трека",error:"Ошибка диагностики",timeout:"Истекло время ожидания",unknown:"Результат не определён"};
+    const names={python:"Python · MarshalX",javascript:"JavaScript · wire"};
+    const title=x?.unavailable?"Данные ручной диагностики недоступны":last?(outcomes[last.outcome]||"Результат не определён"):"Новый ручной результат пока не опубликован";
+    return '<div class="detail-stat ynison-diagnostic"><span>Последняя ручная диагностика · отдельный результат</span><strong>'+esc(title)+'</strong>'+
+      (last?'<p>'+esc(names[last.client]||"Клиент")+' · '+esc(fmtDate(last.checked_at))+'</p>':"")+
+      (x?.retry_after_at?'<p>Следующая попытка не раньше '+esc(fmtDate(x.retry_after_at))+'</p>':"")+
+      '<p>Автоматическая проверка выключена. Результат относится к конкретному аккаунту и времени, а не ко всему сервису.</p></div>';
   }
   function closeModal() {
     const id=state.modal;
     $("#modal-backdrop").hidden=true;
     state.modal=null;
+    $(".app-shell").inert=false;
     document.body.style.overflow="";
     if (id) document.querySelector('[data-check="'+CSS.escape(id)+'"]')?.focus();
   }
   function renderModal() {
     if (!state.modal) return;
+    const focusedRange=document.activeElement?.closest?.("[data-range]")?.dataset.range;
+    const focusedLink=document.activeElement?.closest?.(".detail-link")?.getAttribute("href");
     const c=checks().find(x=>x.id===state.modal);
     if (!c) {closeModal();return;}
     const result=results().get(c.id)||{};
@@ -310,7 +362,7 @@
       '<h2 class="modal-heading" id="modal-title">'+esc(c.name)+'</h2><div class="modal-description">'+esc(c.detail)+'</div>'+
       '<div class="modal-current">'+badge(result.status||"unknown")+'<span class="modal-time">Проверено: '+esc(fmtDate(result.checked_at))+'</span></div>'+
       '<div class="modal-section-title">Время ответа</div><div class="range-switch">'+ranges.map(r=>
-        '<button class="range-btn'+(state.range===r[0]?" active":"")+'" data-range="'+r[0]+'">'+r[1]+'</button>').join("")+'</div>'+
+        '<button class="range-btn'+(state.range===r[0]?" active":"")+'" type="button" aria-pressed="'+(state.range===r[0])+'" data-range="'+r[0]+'">'+r[1]+'</button>').join("")+'</div>'+
       '<div class="history-chart">'+plot(points,state.range,state.data?.interval_minutes||30)+'</div>'+
       '<div class="graph-meta"><span>Измерений: '+points.length+'</span><span>Успешных: '+success+'</span></div>'+
       '<div class="chart-coverage">'+(points.length ? 'Измерения накоплены с '+fmtDate(points[0][0])+'. График равномерно распределяет имеющиеся проверки по ширине, даже если вся история занимает лишь несколько часов. Даты под графиком показывают реальные моменты запросов.' : 'Нет измерений за выбранный период. Это не означает недоступность сервиса.')+'</div>'+
@@ -320,9 +372,11 @@
       stat("Тип проверки",c.kind==="tcp_tls"?"TLS":c.kind.startsWith("music_")?"API":c.kind==="requires_key"?"Нужен ключ":"HTTP")+'</div>'+
       '<div class="detail-disclaimer">«Отвечает» означает успешный ответ <b>данной пробы</b> из сети GitHub Actions. Это не гарантия корректной работы всех функций сервиса для всех пользователей.'+
       (result.note?'<br><br>'+esc(result.note):'')+'</div>'+
-      (c.id==="music-ynison"?'<div class="detail-disclaimer"><b>Дополнительная диагностика</b><br>Можно проверить Ynison через независимый JS-клиент, не используя компьютер. Тест запускается вручную на GitHub и соблюдает паузу сервера. Результат смотри в Summary выполненного workflow.</div><a class="detail-link" target="_blank" rel="noopener noreferrer" href="https://github.com/Okelii77/yandex-pulse/actions/workflows/ynison-diagnostic.yml">Запустить независимую проверку ↗</a><br>':"")+ 
+      (c.id==="music-ynison"?ynisonDiagnosticMarkup()+'<div class="detail-disclaimer"><b>Дополнительная диагностика</b><br>Ручная диагностика Python или JavaScript через GitHub Actions. Автоматическая проба приостановлена; запуск возможен только после проверки общей серверной паузы. Результат доступен в Summary workflow.</div><a class="detail-link" target="_blank" rel="noopener noreferrer" href="https://github.com/Okelii77/yandex-pulse/actions/workflows/ynison-diagnostic.yml">Запустить независимую проверку ↗</a><br>':"")+ 
       (c.id==="music-ynison"?'<a class="detail-link" target="_blank" rel="noopener noreferrer" href="ynison-audit.html">Сравнить протокол с официальным веб-плеером ↗</a><br>':"")+ 
       (c.url && c.url.startsWith("https://")?'<a class="detail-link" target="_blank" rel="noopener noreferrer" href="'+esc(c.url)+'">Открыть проверяемый адрес ↗</a>':'');
+    if(focusedRange)$("#modal-body").querySelector('[data-range="'+CSS.escape(focusedRange)+'"]')?.focus({preventScroll:true});
+    else if(focusedLink)$$(".detail-link",$("#modal-body")).find(x=>x.getAttribute("href")===focusedLink)?.focus({preventScroll:true});
   }
   let toastTimer;
   function notify(message) {
@@ -358,13 +412,27 @@
       let data,history;
       if(window.PulseLive?.enabled()){
         try{
-          const live=await window.PulseLive.snapshot();
+          const live=await window.PulseLive.snapshot(status=>{
+            if(state.data?.generated_at!==status.generated_at)state.historyFresh=false;
+            state.data=status;
+            state.source="live";
+            render();
+            if(state.modal)renderModal();
+          });
           data=live.status;
           history=live.history;
           state.source="live";
+          state.historyFresh=live.historyFresh;
         }catch(e){
-          [data,history]=await Promise.all([fetchJson("./status.json"),fetchJson("./history.json")]);
-          state.source="archive";
+          if(state.data&&["live","last_known"].includes(state.source)){
+            data=state.data;
+            history=state.history;
+            state.source="last_known";
+          }else{
+            [data,history]=await Promise.all([fetchJson("./status.json"),fetchJson("./history.json")]);
+            state.source="archive";
+          }
+          state.historyFresh=false;
         }
       }else{
         [data,history]=await Promise.all([fetchJson("./status.json"),fetchJson("./history.json")]);
@@ -377,7 +445,7 @@
       render();
       if (state.modal) renderModal();
       if(!silent) {
-        if(state.source==="archive")notify("Live API временно недоступен. Показан архивный снимок.");
+        if(["archive","last_known"].includes(state.source))notify("Live API временно недоступен. Показаны сохранённые данные.");
         else notify(refreshMessage(previousTimestamp,data.generated_at));
       }
     } catch(error) {
@@ -406,7 +474,9 @@
     },8000);
   }
   function onHash() {
-    const key=decodeURIComponent(location.hash.replace(/^#\/?/,"")).split("/")[0];
+    if(!location.hash.startsWith("#/")&&location.hash)return;
+    let key="";
+    try{key=decodeURIComponent(location.hash.replace(/^#\/?/,"")).split("/")[0];}catch{key="";}
     state.category=cats().some(c=>c.id===key)?key:"overview";
     state.filter="all";
     $$(".filter").forEach(x=>x.classList.toggle("active",x.dataset.filter==="all"));
@@ -439,14 +509,25 @@
       }else reload(false);
     });
     $("#search").addEventListener("input",e=>{state.query=e.target.value;renderChecks();});
+    $("#jump-to-checks").addEventListener("click",()=>{
+      $("#section-title").focus({preventScroll:true});
+      $("#services-heading").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth",block:"start"});
+    });
     $("#status-filters").addEventListener("click",e=>{
       const btn=e.target.closest("[data-filter]");
       if (!btn) return;
       state.filter=btn.dataset.filter;
-      $$(".filter").forEach(x=>x.classList.toggle("active",x===btn));
+      $$(".filter").forEach(x=>{x.classList.toggle("active",x===btn);x.setAttribute("aria-pressed",String(x===btn));});
       renderChecks();
     });
-    $("#service-list").addEventListener("click",e=>{const btn=e.target.closest("[data-check]");if(btn)showModal(btn.dataset.check);});
+    $("#service-list").addEventListener("click",e=>{
+      if(e.target.closest(".reset-filters")){
+        state.query="";state.filter="all";$("#search").value="";
+        $$(".filter").forEach(x=>x.classList.toggle("active",x.dataset.filter==="all"));
+        renderStats();renderChecks();$("#search").focus();return;
+      }
+      const btn=e.target.closest("[data-check]");if(btn)showModal(btn.dataset.check);
+    });
     $("#modal-body").addEventListener("click",e=>{
       const btn=e.target.closest("[data-range]");
       if(!btn)return;
@@ -457,11 +538,20 @@
     $("#modal-body").addEventListener("pointermove",e=>{if(e.pointerType==="mouse")showChartPoint(e);});
     $("#modal-close").addEventListener("click",closeModal);
     $("#modal-backdrop").addEventListener("click",e=>{if(e.target.id==="modal-backdrop")closeModal();});
-    document.addEventListener("keydown",e=>{if(e.key==="Escape"&&state.modal)closeModal();});
+    document.addEventListener("keydown",e=>{
+      if(!state.modal)return;
+      if(e.key==="Escape"){closeModal();return;}
+      if(e.key!=="Tab")return;
+      const items=$$("button:not([disabled]),a[href],input:not([disabled]),[tabindex='0']",$("#modal-backdrop"));
+      if(!items.length)return;
+      const first=items[0],last=items.at(-1);
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+    });
     window.addEventListener("hashchange",onHash);
     render();
     onHash();
-    if(window.PulseLive?.refreshCapabilities()){
+    if(window.PulseLive?.enabled()){
       window.PulseLive.refreshCapabilities().then(ready=>{
         if(ready){
           $("#refresh-button").title="Запустить диагностику сейчас";
