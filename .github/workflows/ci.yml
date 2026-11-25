@@ -28,3 +28,24 @@ jobs:
           node --check site/live-api.js
           node monitor/test_graph.cjs
           node --test monitor/test_live_api.cjs monitor/test_dashboard.cjs monitor/ynison_alt/*.test.mjs monitor/ynison_alt/test-har-core.mjs worker/test/*.test.mjs
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Browser smoke test with synthetic local data
+        run: |
+          command -v google-chrome
+          node monitor/test_dashboard_browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dashboard-preview
+          path: /tmp/pulse-ui-preview/*.png
+          if-no-files-found: ignore
+          retention-days: 7

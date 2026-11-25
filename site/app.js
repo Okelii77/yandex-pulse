@@ -68,8 +68,8 @@
     $("#side-nav").innerHTML = nav("overview","Общий обзор","overview") +
       '<div class="nav-group-title">ЭКОСИСТЕМА</div>' +
       cats().map(c=>nav(c.id,c.title,c.icon,checks().filter(x=>x.category===c.id).length)).join("");
-    $("#mobile-categories").innerHTML = '<a href="#/" class="mobile-tab' + (state.category==="overview"?" active":"") + '">Обзор</a>' +
-      cats().map(c=>'<a href="#/'+esc(c.id)+'" class="mobile-tab'+(state.category===c.id?" active":"")+'">'+esc(c.title)+'</a>').join("");
+    $("#mobile-categories").innerHTML = '<a href="#/" class="mobile-tab' + (state.category==="overview"?" active":"") + '"'+(state.category==="overview"?' aria-current="page"':'')+'>Обзор</a>' +
+      cats().map(c=>'<a href="#/'+esc(c.id)+'" class="mobile-tab'+(state.category===c.id?" active":"")+'"'+(state.category===c.id?' aria-current="page"':'')+'>'+esc(c.title)+'</a>').join("");
   }
   function describeData(data,source,now,historyFresh){
     const stamp=Date.parse(data?.generated_at);
@@ -138,7 +138,7 @@
   }
   function serviceCard(check,row) {
     const status = row?.status || "unknown";
-    return '<button type="button" class="service-card" data-check="'+esc(check.id)+'" aria-label="Подробнее: '+esc(check.name)+'">' +
+    return '<button type="button" class="service-card" data-check="'+esc(check.id)+'" aria-label="Подробнее: '+esc(check.name)+' · '+esc((STATES[status]||STATES.unknown)[0])+'">' +
       '<span class="service-icon">'+icon(cat(check.category)?.icon)+'</span>' +
       '<span class="service-desc"><span class="service-name">'+esc(check.name)+'</span><span class="service-sub">'+esc(check.detail)+'</span>' +
       (state.category==="overview"?'<span class="service-category">'+esc(cat(check.category)?.title || "")+'</span>':"") +
@@ -319,6 +319,8 @@
   }
   function renderModal() {
     if (!state.modal) return;
+    const focusedRange=document.activeElement?.closest?.("[data-range]")?.dataset.range;
+    const focusedLink=document.activeElement?.closest?.(".detail-link")?.getAttribute("href");
     const c=checks().find(x=>x.id===state.modal);
     if (!c) {closeModal();return;}
     const result=results().get(c.id)||{};
@@ -340,7 +342,7 @@
       '<h2 class="modal-heading" id="modal-title">'+esc(c.name)+'</h2><div class="modal-description">'+esc(c.detail)+'</div>'+
       '<div class="modal-current">'+badge(result.status||"unknown")+'<span class="modal-time">Проверено: '+esc(fmtDate(result.checked_at))+'</span></div>'+
       '<div class="modal-section-title">Время ответа</div><div class="range-switch">'+ranges.map(r=>
-        '<button class="range-btn'+(state.range===r[0]?" active":"")+'" data-range="'+r[0]+'">'+r[1]+'</button>').join("")+'</div>'+
+        '<button class="range-btn'+(state.range===r[0]?" active":"")+'" type="button" aria-pressed="'+(state.range===r[0])+'" data-range="'+r[0]+'">'+r[1]+'</button>').join("")+'</div>'+
       '<div class="history-chart">'+plot(points,state.range,state.data?.interval_minutes||30)+'</div>'+
       '<div class="graph-meta"><span>Измерений: '+points.length+'</span><span>Успешных: '+success+'</span></div>'+
       '<div class="chart-coverage">'+(points.length ? 'Измерения накоплены с '+fmtDate(points[0][0])+'. График равномерно распределяет имеющиеся проверки по ширине, даже если вся история занимает лишь несколько часов. Даты под графиком показывают реальные моменты запросов.' : 'Нет измерений за выбранный период. Это не означает недоступность сервиса.')+'</div>'+
@@ -353,6 +355,8 @@
       (c.id==="music-ynison"?'<div class="detail-disclaimer"><b>Дополнительная диагностика</b><br>Ручная диагностика Python или JavaScript через GitHub Actions. Автоматическая проба приостановлена; запуск возможен только после проверки общей серверной паузы. Результат доступен в Summary workflow.</div><a class="detail-link" target="_blank" rel="noopener noreferrer" href="https://github.com/Okelii77/yandex-pulse/actions/workflows/ynison-diagnostic.yml">Запустить независимую проверку ↗</a><br>':"")+ 
       (c.id==="music-ynison"?'<a class="detail-link" target="_blank" rel="noopener noreferrer" href="ynison-audit.html">Сравнить протокол с официальным веб-плеером ↗</a><br>':"")+ 
       (c.url && c.url.startsWith("https://")?'<a class="detail-link" target="_blank" rel="noopener noreferrer" href="'+esc(c.url)+'">Открыть проверяемый адрес ↗</a>':'');
+    if(focusedRange)$("#modal-body").querySelector('[data-range="'+CSS.escape(focusedRange)+'"]')?.focus({preventScroll:true});
+    else if(focusedLink)$(".detail-link",$("#modal-body")).find(x=>x.getAttribute("href")===focusedLink)?.focus({preventScroll:true});
   }
   let toastTimer;
   function notify(message) {
