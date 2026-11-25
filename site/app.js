@@ -9,7 +9,7 @@
     degraded: ["Ограничено", "Сервер ответил, но работоспособность функции не подтверждена"],
     no_data: ["Нет данных", "API ответил без подходящих данных"],
     not_configured: ["Не настроено", "Для проверки требуются дополнительные права или токен"],
-    disabled: ["Выключено", "Платная проверка доступна только после явного включения"],
+    disabled: ["Выключено", "Проверка временно приостановлена или требует явного включения"],
     cooldown: ["Пауза", "Сервер запросил паузу до следующей проверки"],
     unknown: ["Неизвестно", "Статус нельзя определить"],
   };
@@ -167,6 +167,10 @@
     $("#activity-summary").innerHTML='<div class="summary-number">'+(percent ?? "—")+'<small>'+(percent===null?"":"%")+'</small></div>'+
       '<div class="summary-caption">'+(comparable.length?success+' из '+comparable.length+' успешных проб':'Пока нет измерений за 24 часа')+'</div>'+
       '<div class="availability-bars">'+histogram+'</div>';
+    if(state.source==="live" && state.historyFresh===false){
+      const caption=$(".summary-caption");
+      if(caption)caption.textContent += " · История обновляется или временно недоступна";
+    }
     const events=[];
     for (const chk of checks()) {
       const points=state.history?.series?.[chk.id]||[];
@@ -358,10 +362,17 @@
       let data,history;
       if(window.PulseLive?.enabled()){
         try{
-          const live=await window.PulseLive.snapshot();
+          const live=await window.PulseLive.snapshot(status=>{
+            if(state.data?.generated_at!==status.generated_at)state.historyFresh=false;
+            state.data=status;
+            state.source="live";
+            render();
+            if(state.modal)renderModal();
+          });
           data=live.status;
           history=live.history;
           state.source="live";
+          state.historyFresh=live.historyFresh;
         }catch(e){
           [data,history]=await Promise.all([fetchJson("./status.json"),fetchJson("./history.json")]);
           state.source="archive";
@@ -461,7 +472,7 @@
     window.addEventListener("hashchange",onHash);
     render();
     onHash();
-    if(window.PulseLive?.refreshCapabilities()){
+    if(window.PulseLive?.enabled()){
       window.PulseLive.refreshCapabilities().then(ready=>{
         if(ready){
           $("#refresh-button").title="Запустить диагностику сейчас";

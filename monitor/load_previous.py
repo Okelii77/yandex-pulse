@@ -4,6 +4,7 @@ import json
 import os
 import pathlib
 import urllib.request
+import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -12,6 +13,7 @@ def main():
     if not base.startswith("https://"):
         print("Live API not configured, using repository snapshot")
         return
+    started = time.monotonic()
     try:
         req = urllib.request.Request(base + "/api/status", headers={"User-Agent": "YandexPulseProbe/1.1"})
         with urllib.request.urlopen(req, timeout=10) as response:
@@ -25,7 +27,7 @@ def main():
             raise ValueError("invalid format")
         path = ROOT / "site" / "status.json"
         path.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
-        print("Loaded previous probe metadata (no account details)")
+        print("Loaded previous probe metadata; duration_ms =", round((time.monotonic()-started)*1000))
     except Exception as exc:
         print("No previous live state available:", type(exc).__name__)
 

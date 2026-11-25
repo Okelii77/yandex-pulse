@@ -75,8 +75,30 @@ async function latest(env) {
   return row ? JSON.parse(row.payload) : null;
 }
 
-function cachesAllowed(request) {
-  return request.method==="GET" && !request.headers.get("Authorization");
+// Cache public history only. Status stays authoritative for cooldown readers.
+const HISTORY_CACHE_SECONDS = 120;
+async function historyResponse(request, env, cors, ctx) {
+  const cache = !request.headers.has("Authorization") ? globalThis.caches?.default : null;
+  if (!cache) return json(await history(env), 200, cors);
+  const revision = await env.DB.prepare("SELECT generated_at FROM latest WHERE id=1").first();
+  if (!utc(revision?.generated_at)) return json(await history(env), 200, cors);
+  const key = new URL("/api/history", request.url);
+  key.searchParams.set("revision", revision.generated_at);
+  const cacheKey = new Request(key.toString(), {method:"GET"});
+  let hit;
+  try { hit = await cache.match(cacheKey); } catch { /* Cache is optional. */ }
+  if (hit?.ok) return new Response(hit.body, {headers:{
+    "Content-Type":"application/json; charset=utf-8", "Cache-Control":"no-store",
+    "X-Content-Type-Options":"nosniff", "X-Pulse-Cache":"HIT", ...cors
+  }});
+  const payload = await history(env);
+  const stored = new Response(JSON.stringify(payload), {headers:{
+    "Content-Type":"application/json; charset=utf-8",
+    "Cache-Control":"public, max-age="+HISTORY_CACHE_SECONDS
+  }});
+  const write = Promise.resolve().then(()=>cache.put(cacheKey,stored)).catch(()=>{});
+  if (ctx?.waitUntil) ctx.waitUntil(write); else await write;
+  return json(payload,200,{"X-Pulse-Cache":"MISS",...cors});
 }
 
 async function history(env) {
@@ -221,7 +243,7 @@ async function trigger(request,env,cors) {
 }
 
 export default {
-  async fetch(request,env) {
+  async fetch(request,env,ctx) {
     const cors=corsHeaders(request);
     const url=new URL(request.url);
     try {
@@ -237,9 +259,9 @@ export default {
         const data=await latest(env);
         return data ? json(data,200,cors) : json({error:"waiting_for_first_probe"},503,cors);
       }
-      if(url.pathname==="/api/history" && request.method==="GET")return json(await history(env),200,cors);
-      if(url.pathname==="/api/ingest" && request.method==="POST")return ingest(request,env,cors);
-      if(url.pathname==="/api/trigger" && request.method==="POST")return trigger(request,env,cors);
+      if(url.pathname==="/api/history" && request.method==="GET")return await historyResponse(request,env,cors,ctx);
+      if(url.pathname==="/api/ingest" && request.method==="POST")return await ingest(request,env,cors);
+      if(url.pathname==="/api/trigger" && request.method==="POST")return await trigger(request,env,cors);
       return json({error:"not_found"},404,cors);
     }catch {
       return json({error:"internal_error"},500,cors);

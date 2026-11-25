@@ -13,16 +13,29 @@
   }
 
   async function read(path) {
-    const r=await fetch(base+path,{headers:{Accept:"application/json"},cache:"no-store"});
+    const r=await fetch(base+path,{headers:{Accept:"application/json"},cache:"no-store",signal:AbortSignal.timeout(8000)});
     if(!r.ok)throw new Error("API HTTP "+r.status);
     return r.json();
   }
-  async function snapshot() {
+  let lastHistory=null, historyRevision=null, historyLoadedAt=0;
+  async function snapshot(onStatus=()=>{}) {
     if(!enabled())throw Error("Worker API is not configured");
-    const [status,history]=await Promise.all([read("/api/status"),read("/api/history")]);
-    if(!status || !Array.isArray(status.results) || !history || !history.series)
+    const status=await read("/api/status");
+    if(!status || !Array.isArray(status.results) || !Array.isArray(status.checks) ||
+       !Number.isFinite(Date.parse(status.generated_at)))
       throw Error("Unexpected Worker response");
-    return {status,history};
+    onStatus(status);
+    if(historyRevision!==status.generated_at || Date.now()-historyLoadedAt>=300000){
+      try {
+        const next=await read("/api/history");
+        if(!next || !next.series || typeof next.series!=="object" || Array.isArray(next.series))
+          throw Error("Unexpected history response");
+        lastHistory=next;
+        historyRevision=status.generated_at;
+        historyLoadedAt=Date.now();
+      } catch { return {status,history:lastHistory,historyFresh:false}; }
+    }
+    return {status,history:lastHistory,historyFresh:true};
   }
 
   let script;

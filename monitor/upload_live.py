@@ -4,6 +4,7 @@ import json
 import os
 import pathlib
 import urllib.request
+import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -32,6 +33,7 @@ def main():
         headers={"Authorization": "Bearer " + token,
                  "Content-Type": "application/json",
                  "User-Agent": "YandexPulseProbe/1.1"})
+    started = time.monotonic()
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             if response.status != 200:
@@ -39,7 +41,7 @@ def main():
             output = json.loads(response.read(8192))
             if output.get("ok") is not True:
                 raise RuntimeError("ingest failed")
-        print("Live snapshot accepted by Cloudflare D1; GitHub Pages redeploy not required")
+        print("Live snapshot accepted by Cloudflare D1; duration_ms =", round((time.monotonic()-started)*1000), "bytes =", len(raw))
     except Exception as exc:
         # Avoid urllib HTTPError string which can reveal URLs and error bodies.
         print("Live upload failed:", type(exc).__name__)
