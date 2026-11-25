@@ -50,8 +50,10 @@ def classify_state(frame):
     idx = 0 if raw_index is None else integer(raw_index)
     if (entries is not None and not isinstance(entries, list)) or idx is None or idx < -1:
         return None
-    if idx == -1 or entries == []:
+    if idx == -1:
         return "no_data"
+    if entries == []:
+        return "no_data" if idx == 0 else None
     if not isinstance(entries, list) or idx >= len(entries):
         return None
     playable = field(entries[idx], "playable_id", "playableId")

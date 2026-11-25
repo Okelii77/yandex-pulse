@@ -114,5 +114,20 @@
       }
     },
     "expected": null
+  },
+  {
+    "name": "empty queue with invalid positive index",
+    "frame": {
+      "player_state": {
+        "status": {
+          "paused": true
+        },
+        "player_queue": {
+          "playable_list": [],
+          "current_playable_index": 99
+        }
+      }
+    },
+    "expected": null
   }
 ]

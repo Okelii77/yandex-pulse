@@ -1,7 +1,8 @@
 import {appendFile,writeFile} from "node:fs/promises";
-import {randomUUID,randomBytes} from "node:crypto";
+import {randomUUID,createHmac} from "node:crypto";
 import WebSocket from "ws";
 import {classifyState,validRedirectHost} from "./state-confirmation.mjs";
+import {safeServerError,safeHandshakeError} from "./server-error.mjs";
 const API="https://yandex-pulse-api.oleg-pulse-03.workers.dev";
 const started=Date.now();
 async function gate(path,body){
@@ -13,20 +14,6 @@ async function gate(path,body){
   if(typeof value!=="string"||!value)throw Error("oidc");
   const resp=await fetch(API+"/api/ynison/"+path,{method:"POST",headers:{Authorization:"Bearer "+value,"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(8000)});
   return {code:resp.status,body:await resp.json()};
-}
-function safeServerError(err){
-  const details=err?.details??err?.extra_headers??{};
-  const result={status:"error",stage:"server"};
-  for(const [name,value] of [["http_code",err?.http_code],["grpc_code",err?.grpc_code],["error_code",details["ynison-error-code"]]]){
-    if(/^\d{1,10}$/.test(String(value)))result[name]=Number(value);
-  }
-  const away=details["ynison-go-away-for-seconds"];
-  if(away!==undefined){
-    const n=Number(away);
-    if(Number.isSafeInteger(n)&&n>0&&n<=315360000)result.retry_after_seconds=n;
-    else result.status="unknown";
-  }
-  return result;
 }
 function exchange(url,token,protocol,hello,accept,stage){
   return new Promise(resolve=>{
@@ -44,7 +31,7 @@ function exchange(url,token,protocol,hello,accept,stage){
       });
       timer=setTimeout(()=>finish({status:"timeout",stage}),12000);
       ws.on("open",()=>{if(hello)try{ws.send(JSON.stringify(hello));}catch{finish({status:"unknown",stage});}});
-      ws.on("unexpected-response",(_req,res)=>{res.destroy();finish({status:"error",stage,http_code:res.statusCode});});
+      ws.on("unexpected-response",(_req,res)=>{res.destroy();finish(safeHandshakeError(res.statusCode,res.headers,stage));});
       ws.on("error",()=>finish({status:"unknown",stage}));
       ws.on("close",()=>finish({status:"error",stage}));
       ws.on("message",(raw,binary)=>{
@@ -60,7 +47,7 @@ function exchange(url,token,protocol,hello,accept,stage){
 }
 async function probe(token){
   // Isolated controller identity; never sends a playback, queue edit or claim command.
-  const id=randomBytes(8).toString("hex");
+  const id=createHmac("sha256",token).update("yandex-pulse-js-observer-v1").digest("hex").slice(0,16);
   const protocol={"Ynison-Device-Id":id,"Ynison-Device-Info":JSON.stringify({app_name:"Yandex Pulse",type:"1"})};
   const redirect=await exchange("wss://ynison.music.yandex.ru/redirector.YnisonRedirectService/GetRedirectToYnison",token,protocol,null,f=>{
     const ticket=f?.redirect_ticket??f?.redirectTicket, session=f?.session_id??f?.sessionId;

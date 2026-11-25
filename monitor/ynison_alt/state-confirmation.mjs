@@ -14,7 +14,8 @@ export function classifyState(frame){
   if(list!==undefined&&!Array.isArray(list))return null;
   const idx=rawIndex===undefined?0:integer(rawIndex);
   if(idx===null||idx< -1)return null;
-  if(idx===-1 || (Array.isArray(list)&&list.length===0))return "no_data";
+  if(idx===-1)return "no_data";
+  if(Array.isArray(list)&&list.length===0)return idx===0?"no_data":null;
   if(!Array.isArray(list)||idx>=list.length)return null;
   const id=field(list[idx],"playable_id","playableId");
   return typeof id==="string"&&id.trim()?"ok":null;

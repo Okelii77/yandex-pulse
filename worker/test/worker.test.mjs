@@ -75,3 +75,11 @@ test("status never uses history cache and always reads authoritative D1",async()
     assert.equal(r.headers.get("Cache-Control"),"no-store");
   }
 });
+
+test("Ynison gate rejects unauthenticated and legacy ingest tokens",async()=>{
+  for(const path of ["/api/ynison/acquire","/api/ynison/finish"]){
+    const r=await worker.fetch(new Request("https://pulse.workers.dev"+path,{method:"POST",headers:{Authorization:"Bearer legacy-secret"},body:"{}"}),{DB:{},INGEST_TOKEN:"legacy-secret"});
+    assert.equal(r.status,401);
+    assert.equal(r.headers.get("Cache-Control"),"no-store");
+  }
+});
