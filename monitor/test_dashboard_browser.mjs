@@ -20,7 +20,7 @@ const server=createServer(async(req,res)=>{
     if(pathname==="/status.json"||pathname==="/history.json"||pathname==="/api-config.js"){
       const js=pathname.endsWith(".js");
       res.writeHead(200,{"Content-Type":js?mime[".js"]:mime[".json"]});
-      return res.end(js?"window.PULSE_API_CONFIG={};":JSON.stringify(pathname==="/status.json"?sample:history));
+      return res.end(js?"window.PULSE_API_CONFIG=location.search.includes('live=1')?{apiUrl:'https://pulse.test'}:{};":JSON.stringify(pathname==="/status.json"?sample:history));
     }
     const name=pathname==="/"?"index.html":pathname.slice(1);
     if(!/^[a-zA-Z0-9_.-]+$/.test(name)){res.writeHead(404);return res.end();}
@@ -117,6 +117,49 @@ try{
     await click("#theme-toggle");
     assert.equal(await evalJS("['light','dark'].includes(document.documentElement.dataset.theme)"),true);
     console.log(name+": navigation, filters, search reset, modal, theme, viewport OK");
+  }
+  // Exercise the real live-api.js with synthetic fetch responses; never call a remote host.
+  await send("Page.addScriptToEvaluateOnNewDocument",{source:`(()=>{
+    const original=window.fetch.bind(window), sample=${JSON.stringify(sample)}, history=${JSON.stringify(history)};
+    window.__pulseMode=new URLSearchParams(location.search).get("mode")||"fresh";
+    window.fetch=async(input,options)=>{
+      const url=new URL(typeof input==="string"?input:input.url,location.href), mode=window.__pulseMode;
+      if(url.hostname==="pulse.test"){
+        if(["archive","offline","lost"].includes(mode))throw Error("synthetic live outage");
+        if(url.pathname==="/api/status")return Response.json(mode==="stale"?{...sample,generated_at:new Date(Date.now()-3*3600000).toISOString()}:mode==="history"?{...sample,generated_at:new Date(Date.now()-1000).toISOString()}:sample);
+        if(url.pathname==="/api/history"){if(mode==="history")throw Error("synthetic history outage");return Response.json(history);}
+      }
+      if(mode==="offline"&&["/status.json","/history.json"].includes(url.pathname))throw Error("synthetic archive outage");
+      if(mode==="static-history"&&url.pathname==="/history.json")throw Error("synthetic history outage");
+      return original(input,options);
+    };
+  })()`});
+  for(const [name,width,height] of [["desktop",1440,900],["mobile",390,844]]){
+    await send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:false});
+    for(const [mode,title,kind,live] of [
+      ["fresh","Данные получены из Live API","ok",true],
+      ["history","Данные получены из Live API","ok",true],
+      ["stale","Данные устарели","warning",true],
+      ["archive","Показаны сохранённые данные","warning",true],
+      ["offline","Данные недоступны","error",true],
+      ["static-history","Опубликованный снимок","neutral",false]]){
+      await send("Page.navigate",{url:origin+"/?"+(live?"live=1&":"")+"mode="+mode+"#/"});
+      await wait("document.querySelector('.data-health-title')?.textContent==="+JSON.stringify(title)+"&&!document.querySelector('#refresh-button').disabled");
+      assert.equal(await evalJS("document.querySelector('#data-health').dataset.state"),kind,mode);
+      assert.equal(await evalJS("document.querySelector('.data-health-dot').textContent"),"");
+      if(mode==="history"||mode==="static-history")assert.match(await evalJS("document.querySelector('.data-health-detail').textContent"),/история/);
+      if(mode==="offline")assert.match(await evalJS("document.querySelector('#topbar-check').textContent"),/Данные недоступны/);
+      if(mode==="fresh"){
+        await evalJS("window.__pulseMode='lost'");
+        await click("#refresh-button");
+        await wait("document.querySelector('.data-health-title').textContent==='Показаны сохранённые данные'&&!document.querySelector('#refresh-button').disabled");
+        await evalJS("window.__pulseMode='fresh'");
+        await click("#refresh-button");
+        await wait("document.querySelector('.data-health-title').textContent==='Данные получены из Live API'&&!document.querySelector('#refresh-button').disabled");
+      }
+      assert.equal(await evalJS("document.documentElement.scrollWidth<=innerWidth"),true,mode+" "+name);
+      await shot(name+"-"+mode);
+    }
   }
   assert.deepEqual(errors,[],"browser errors");
 }finally{

@@ -26,3 +26,13 @@ test("stale, missing and static data are not called live",()=>{
   assert.equal(describe(snapshot,"live",now+7200000,true).kind,"warning");
   assert.equal(describe(snapshot,"legacy",now,true).kind,"neutral");
 });
+
+test("failed refresh differs from initial loading and never claims live",()=>{
+  assert.equal(describe(null,"legacy",now,false,true).kind,"error");
+  const d=describe(snapshot,"live",now,false,true);
+  assert.equal(d.kind,"warning");
+  assert.match(d.detail,/Обновление не удалось/);
+});
+test("published status without history remains usable but labelled",()=>{
+  assert.match(describe(snapshot,"legacy",now,false).detail,/история/);
+});

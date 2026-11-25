@@ -293,6 +293,7 @@ html[data-theme="light"]{--subtle:#666970;--ring:rgba(126,97,0,.65)}
 .data-health-dot{width:9px;height:9px;border-radius:50%;background:var(--subtle);flex-shrink:0}
 .data-health[data-state="ok"] .data-health-dot{background:var(--green);box-shadow:0 0 0 4px var(--green-bg)}
 .data-health[data-state="warning"] .data-health-dot{background:var(--amber);box-shadow:0 0 0 4px var(--amber-bg)}
+.data-health[data-state="error"] .data-health-dot{background:var(--red);box-shadow:0 0 0 4px var(--red-bg)}
 .data-health-source{flex:0 0 auto;max-width:32%;font-size:11px;line-height:1.45;color:var(--muted);text-align:right;overflow-wrap:anywhere}
 .metric-card{min-height:120px;padding:17px 20px}
 .metric-value,.summary-number,.mini-latency,.nav-count,.metric-footer{font-variant-numeric:tabular-nums}

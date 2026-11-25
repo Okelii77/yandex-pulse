@@ -33,7 +33,7 @@
     ["other","Другие сервисы","layers"]
   ].map(([id,title,icon]) => ({id,title,icon,description:"Проверки сервиса"}));
 
-  const state = {data:null, history:null, category:"overview", filter:"all", query:"", modal:null, range:24, loading:false, source:"legacy",historyFresh:false};
+  const state = {data:null, history:null, category:"overview", filter:"all", query:"", modal:null, range:24, loading:false, source:"legacy",historyFresh:false,loadFailed:false};
   const icon = key => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (PATHS[key] || PATHS.layers) + '</svg>';
   const esc = x => String(x == null ? "" : x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
   const cats = () => state.data?.categories || FALLBACK_CATEGORIES;
@@ -71,15 +71,17 @@
     $("#mobile-categories").innerHTML = '<a href="#/" class="mobile-tab' + (state.category==="overview"?" active":"") + '"'+(state.category==="overview"?' aria-current="page"':'')+'>Обзор</a>' +
       cats().map(c=>'<a href="#/'+esc(c.id)+'" class="mobile-tab'+(state.category===c.id?" active":"")+'"'+(state.category===c.id?' aria-current="page"':'')+'>'+esc(c.title)+'</a>').join("");
   }
-  function describeData(data,source,now,historyFresh){
+  function describeData(data,source,now,historyFresh,loadFailed=false){
     const stamp=Date.parse(data?.generated_at);
     const valid=Number.isFinite(stamp);
     const outdated=valid && now-stamp>Math.max(90,(data.interval_minutes||30)*2.5)*60000;
     const origin=source==="live"?"Cloudflare D1":source==="archive"||source==="last_known"?"Резервные данные":"GitHub Pages";
+    if(!valid&&loadFailed)return {kind:"error",title:"Данные недоступны",detail:"Не удалось загрузить результаты проверок. Повторяем автоматически.",source:"Нет данных"};
     if(!valid)return {kind:"waiting",title:"Ожидаем измерения",detail:"Последняя проверка ещё не получена",source:origin};
+    if(loadFailed)return {kind:"warning",title:"Показаны сохранённые данные",detail:"Обновление не удалось · "+(outdated?"снимок устарел":"показана последняя доступная проверка"),source:origin};
     if(source==="archive"||source==="last_known")return {kind:"warning",title:"Показаны сохранённые данные",detail:"Live API недоступен · "+(outdated?"снимок устарел":"снимок не подтверждён как актуальный"),source:origin};
     if(outdated)return {kind:"warning",title:"Данные устарели",detail:"Последняя проверка старше ожидаемого интервала",source:origin};
-    return {kind:source==="live"?"ok":"neutral",title:source==="live"?"Данные получены из Live API":"Опубликованный снимок",detail:source==="live"&&!historyFresh?"Статусы доступны · история загружается или недоступна":"Последняя опубликованная проверка · не официальный статус Яндекса",source:origin};
+    return {kind:source==="live"?"ok":"neutral",title:source==="live"?"Данные получены из Live API":"Опубликованный снимок",detail:!historyFresh?"Статусы доступны · история загружается или недоступна":"Последняя опубликованная проверка · не официальный статус Яндекса",source:origin};
   }
   function renderHero() {
     const current = cat(state.category);
@@ -93,12 +95,17 @@
     $("#category-intro").hidden = !current;
     if (current) $("#category-intro").innerHTML = '<div><b>'+esc(current.title)+'</b><p>'+esc(current.description)+'</p></div><strong>'+checks().filter(x=>x.category===current.id).length+' проверок</strong>';
     $("#last-updated").textContent = state.data?.generated_at ? 'Последняя проверка: '+fmtDate(state.data.generated_at) : 'Данных о последней проверке пока нет';
-    const health=$("#data-health"), copy=describeData(state.data,state.source,Date.now(),state.historyFresh);
+    const health=$("#data-health"), copy=describeData(state.data,state.source,Date.now(),state.historyFresh,state.loadFailed);
     health.dataset.state=copy.kind;
     health.querySelector(".data-health-title").textContent=copy.title;
     health.querySelector(".data-health-detail").textContent=copy.detail;
     health.querySelector(".data-health-source").textContent=copy.source;
     const check = $("#topbar-check"), dot = $(".status-ping",check);
+    if (state.loadFailed) {
+      check.lastChild.textContent = state.data ? " Обновление не удалось" : " Данные недоступны";
+      dot.className = "status-ping is-error";
+      return;
+    }
     if (["archive","last_known"].includes(state.source) && window.PulseLive?.enabled()) {
       check.lastChild.textContent = " API недоступен";
       dot.className = "status-ping is-error";
@@ -191,7 +198,7 @@
     $("#activity-summary").innerHTML='<div class="summary-number">'+(percent ?? "—")+'<small>'+(percent===null?"":"%")+'</small></div>'+
       '<div class="summary-caption">'+(comparable.length?success+' из '+comparable.length+' успешных проб':'Пока нет измерений за 24 часа')+'</div>'+
       '<div class="availability-bars">'+histogram+'</div>';
-    if(state.source==="live" && state.historyFresh===false){
+    if(state.historyFresh===false){
       const caption=$(".summary-caption");
       if(caption)caption.textContent += " · История обновляется или временно недоступна";
     }
@@ -206,7 +213,7 @@
     $("#events-list").innerHTML=events.length?events.slice(0,6).map(x=>
       '<div class="event"><span class="event-dot '+esc(x.status)+'"></span><div><b>'+esc(x.name)+' · '+esc(STATES[x.status]?.[0]||x.status)+
       '</b><small>'+esc(fmtDate(x.time,true))+'</small></div></div>').join("") :
-      '<div class="empty-mini">'+(state.historyFresh===false&&state.source==="live"?"История пока недоступна.":"Изменений за последние 24 часа не зафиксировано.")+'</div>';
+      '<div class="empty-mini">'+(state.historyFresh===false?"История пока недоступна или не подтверждена как актуальная.":"Изменений за последние 24 часа не зафиксировано.")+'</div>';
   }
   function render() {
     renderNavigation();renderHero();renderStats();renderChecks();renderHistorySummary();
@@ -401,6 +408,11 @@
       return "Появилась новая проверка: "+fmtDate(after);
     return "Новых проверок пока нет. Последний замер: "+fmtDate(after);
   }
+  async function readPublished() {
+    const status=await fetchJson("./status.json");
+    const history=await fetchJson("./history.json").catch(()=>null);
+    return [status,history?.series && typeof history.series==="object" && !Array.isArray(history.series) ? history : null];
+  }
   async function reload(silent=false) {
     if (state.loading) return;
     const previousTimestamp=state.data?.generated_at;
@@ -416,6 +428,7 @@
             if(state.data?.generated_at!==status.generated_at)state.historyFresh=false;
             state.data=status;
             state.source="live";
+            state.loadFailed=false;
             render();
             if(state.modal)renderModal();
           });
@@ -429,19 +442,21 @@
             history=state.history;
             state.source="last_known";
           }else{
-            [data,history]=await Promise.all([fetchJson("./status.json"),fetchJson("./history.json")]);
+            [data,history]=await readPublished();
             state.source="archive";
           }
           state.historyFresh=false;
         }
       }else{
-        [data,history]=await Promise.all([fetchJson("./status.json"),fetchJson("./history.json")]);
+        [data,history]=await readPublished();
         state.source="legacy";
+        state.historyFresh=history!==null;
       }
-      if (!data || !Array.isArray(data.results) || !Array.isArray(data.checks))
+      if (!data || !Array.isArray(data.results) || !Array.isArray(data.checks) || !Number.isFinite(Date.parse(data.generated_at)))
         throw Error("Неверный формат статуса");
       state.data=data;
       state.history=history;
+      state.loadFailed=false;
       render();
       if (state.modal) renderModal();
       if(!silent) {
@@ -450,7 +465,10 @@
       }
     } catch(error) {
       if (!silent) notify("Не удалось загрузить данные. Проверь GitHub Actions.");
-      if (!state.data) render();
+      state.loadFailed=true;
+      state.historyFresh=false;
+      render();
+      if(state.modal)renderModal();
       if (!silent) console.warn("Yandex Pulse: publication unavailable",error.message);
     } finally {
       state.loading=false;
