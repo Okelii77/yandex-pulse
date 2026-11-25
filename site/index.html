@@ -10,7 +10,7 @@
   <link rel="icon" href="./favicon-32-v2.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon-v2.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css?v=ui4">
+  <link rel="stylesheet" href="./styles.css?v=ui5">
   <title>Yandex Pulse — мониторинг экосистемы</title>
 </head>
 <body>
@@ -78,7 +78,7 @@
           <div class="hero-corner" aria-hidden="true">PULSE / 001</div>
         </section>
 
-        <div id="data-health" class="data-health" role="status"><span class="data-health-dot" aria-hidden="true"></span><div><strong>Ожидаем измерения</strong><span>Получаем последнюю опубликованную проверку</span></div><span class="data-health-source">GitHub Actions</span></div>
+        <div id="data-health" class="data-health" role="status"><span class="data-health-dot" aria-hidden="true"></span><div class="data-health-copy"><strong class="data-health-title">Ожидаем измерения</strong><span class="data-health-detail">Получаем последнюю опубликованную проверку</span></div><span class="data-health-source">GitHub Actions</span></div>
         <section class="metrics-grid" id="metrics-grid" aria-label="Сводная статистика">
           <div class="metric-card"><div class="metric-top">Всего проверок <span>↗</span></div><div class="metric-value">—</div><div class="metric-footer">В конфигурации</div></div>
           <div class="metric-card"><div class="metric-top">Отвечают <span class="metric-circle good"></span></div><div class="metric-value">—</div><div class="metric-footer">Успешный технический ответ</div></div>
@@ -145,6 +145,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="./api-config.js?v=ui4" defer></script>
   <script src="./live-api.js?v=ui4" defer></script>
-  <script src="./app.js?v=ui4" defer></script>
+  <script src="./app.js?v=ui5" defer></script>
 </body>
 </html>

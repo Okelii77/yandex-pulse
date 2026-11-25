@@ -95,8 +95,8 @@
     $("#last-updated").textContent = state.data?.generated_at ? 'Последняя проверка: '+fmtDate(state.data.generated_at) : 'Данных о последней проверке пока нет';
     const health=$("#data-health"), copy=describeData(state.data,state.source,Date.now(),state.historyFresh);
     health.dataset.state=copy.kind;
-    health.querySelector("strong").textContent=copy.title;
-    health.querySelector("div > span").textContent=copy.detail;
+    health.querySelector(".data-health-title").textContent=copy.title;
+    health.querySelector(".data-health-detail").textContent=copy.detail;
     health.querySelector(".data-health-source").textContent=copy.source;
     const check = $("#topbar-check"), dot = $(".status-ping",check);
     if (["archive","last_known"].includes(state.source) && window.PulseLive?.enabled()) {
