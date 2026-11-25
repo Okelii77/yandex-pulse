@@ -23,7 +23,10 @@ concurrency:
 jobs:
   diagnose:
     name: Independent diagnostic (guarded)
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'test(ynison): one protected JavaScript live verification')
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.head_commit.message == 'test(ynison): one protected JavaScript live verification')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
