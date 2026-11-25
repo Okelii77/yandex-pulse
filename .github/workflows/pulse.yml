@@ -54,7 +54,7 @@ jobs:
           node monitor/test_graph.cjs
           node --check site/live-api.js
           node --check monitor/ynison_alt/diagnose.mjs
-          node --test monitor/test_live_api.cjs monitor/ynison_alt/*.test.mjs
+          node --test monitor/test_live_api.cjs monitor/test_dashboard.cjs monitor/ynison_alt/*.test.mjs
           node --test monitor/ynison_alt/test-har-core.mjs
           node --test worker/test/*.test.mjs
       - name: Verify Cloudflare manual-trigger readiness

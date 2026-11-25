@@ -27,4 +27,4 @@ jobs:
           node --check site/app.js
           node --check site/live-api.js
           node monitor/test_graph.cjs
-          node --test monitor/test_live_api.cjs monitor/ynison_alt/*.test.mjs monitor/ynison_alt/test-har-core.mjs worker/test/*.test.mjs
+          node --test monitor/test_live_api.cjs monitor/test_dashboard.cjs monitor/ynison_alt/*.test.mjs monitor/ynison_alt/test-har-core.mjs worker/test/*.test.mjs
