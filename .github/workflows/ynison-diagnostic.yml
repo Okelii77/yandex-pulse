@@ -1,9 +1,6 @@
 name: Yandex Pulse · Ynison independent diagnostic
 
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/ynison-diagnostic.yml']
   workflow_dispatch:
     inputs:
       client:
@@ -23,10 +20,7 @@ concurrency:
 jobs:
   diagnose:
     name: Independent diagnostic (guarded)
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' ||
-      github.event.head_commit.message == 'test(ynison): one protected JavaScript live verification')
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -35,7 +29,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install JS transport without install scripts
-        if: github.event_name == 'push' || inputs.client == 'javascript'
+        if: inputs.client == 'javascript'
         run: npm install --prefix monitor/ynison_alt --ignore-scripts --no-audit --no-fund
       - uses: actions/setup-python@v5
         if: inputs.client == 'python'
@@ -47,7 +41,7 @@ jobs:
       - name: Diagnose with server go-away protection
         env:
           YANDEX_MUSIC_TOKEN: ${{ secrets.YANDEX_MUSIC_TOKEN }}
-          PULSE_DIAGNOSTIC_CLIENT: ${{ inputs.client || 'javascript' }}
+          PULSE_DIAGNOSTIC_CLIENT: ${{ inputs.client }}
         run: |
           if [ "$PULSE_DIAGNOSTIC_CLIENT" = python ]; then
             python monitor/ynison_alt/diagnose.py
