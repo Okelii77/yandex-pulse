@@ -123,9 +123,9 @@
     const value = [arr.length || "—", arr.filter(x=>x.status==="ok").length, arr.filter(x=>x.status==="down").length, mean == null ? "—" : mean];
     $$(".metric-value").forEach((x,i)=>x.textContent = arr.length ? value[i] : "—");
     const others = arr.filter(x=>!["ok","down"].includes(x.status)).length;
-    $(".metric-footer")[0].textContent = arr.length ? others+' прочих статусов' : 'В конфигурации';
+    $$(".metric-footer")[0].textContent = arr.length ? others+' прочих статусов' : 'В конфигурации';
     const counts={all:arr.length,ok:arr.filter(x=>x.status==="ok").length,down:arr.filter(x=>x.status==="down").length,other:others};
-    $("#status-filters .filter").forEach(button=>{
+    $$("#status-filters .filter").forEach(button=>{
       button.querySelector("span").textContent=state.data?counts[button.dataset.filter]:"—";
       button.setAttribute("aria-pressed",String(state.filter===button.dataset.filter));
     });
@@ -356,7 +356,7 @@
       (c.id==="music-ynison"?'<a class="detail-link" target="_blank" rel="noopener noreferrer" href="ynison-audit.html">Сравнить протокол с официальным веб-плеером ↗</a><br>':"")+ 
       (c.url && c.url.startsWith("https://")?'<a class="detail-link" target="_blank" rel="noopener noreferrer" href="'+esc(c.url)+'">Открыть проверяемый адрес ↗</a>':'');
     if(focusedRange)$("#modal-body").querySelector('[data-range="'+CSS.escape(focusedRange)+'"]')?.focus({preventScroll:true});
-    else if(focusedLink)$(".detail-link",$("#modal-body")).find(x=>x.getAttribute("href")===focusedLink)?.focus({preventScroll:true});
+    else if(focusedLink)$$(".detail-link",$("#modal-body")).find(x=>x.getAttribute("href")===focusedLink)?.focus({preventScroll:true});
   }
   let toastTimer;
   function notify(message) {
@@ -497,13 +497,13 @@
       const btn=e.target.closest("[data-filter]");
       if (!btn) return;
       state.filter=btn.dataset.filter;
-      $(".filter").forEach(x=>{x.classList.toggle("active",x===btn);x.setAttribute("aria-pressed",String(x===btn));});
+      $$(".filter").forEach(x=>{x.classList.toggle("active",x===btn);x.setAttribute("aria-pressed",String(x===btn));});
       renderChecks();
     });
     $("#service-list").addEventListener("click",e=>{
       if(e.target.closest(".reset-filters")){
         state.query="";state.filter="all";$("#search").value="";
-        $(".filter").forEach(x=>x.classList.toggle("active",x.dataset.filter==="all"));
+        $$(".filter").forEach(x=>x.classList.toggle("active",x.dataset.filter==="all"));
         renderStats();renderChecks();$("#search").focus();return;
       }
       const btn=e.target.closest("[data-check]");if(btn)showModal(btn.dataset.check);
@@ -522,7 +522,7 @@
       if(!state.modal)return;
       if(e.key==="Escape"){closeModal();return;}
       if(e.key!=="Tab")return;
-      const items=$("button:not([disabled]),a[href],input:not([disabled]),[tabindex='0']",$("#modal-backdrop"));
+      const items=$$("button:not([disabled]),a[href],input:not([disabled]),[tabindex='0']",$("#modal-backdrop"));
       if(!items.length)return;
       const first=items[0],last=items.at(-1);
       if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
