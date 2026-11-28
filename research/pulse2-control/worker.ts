@@ -220,7 +220,22 @@ export async function history(db:DB,request:Request,now:number,headers:Record<st
  const full=JSON.parse(cached.payload),since=new URL(request.url).searchParams.get("since");
  if(since&&since!==revision&&/^\d+-\d+$/.test(since)){
   const old=await db.prepare("SELECT payload FROM rc_history WHERE revision=?").bind(since).first();
-  if(old){const prev=JSON.parse(old.payload).series,replace:Record<string,any>={};for(const [k,v] of Object.entries(full.series))if(JSON.stringify(v)!==JSON.stringify(prev[k]))replace[k]=v;const remove=Object.keys(prev).filter(k=>!(k in full.series));const delta={schema:1,base_revision:since,revision,as_of:full.as_of,replace,remove,full_etag:tag};const dtag='"d-'+since+'-'+revision+'"';return request.headers.get("If-None-Match")===dtag?response(null,304,{...headers,ETag:dtag}):response(delta,200,{...headers,ETag:dtag});}
+  if(old){const prev=JSON.parse(old.payload).series;
+   if(new URL(request.url).searchParams.get("format")==="points-v1"){
+    const patch:Record<string,any>={},remove=Object.keys(prev).filter(k=>!(k in full.series));
+    for(const [k,v] of Object.entries(full.series)){
+     const next=v as any[],before=new Map<string,any>((prev[k]||[]).map((x:any)=>[x[0],x]));
+     const stamps=new Set(next.map(x=>x[0]));
+     const drop=[...before.keys()].filter(x=>!stamps.has(x));
+     const upsert=next.filter(x=>JSON.stringify(x)!==JSON.stringify(before.get(x[0])));
+     if(drop.length||upsert.length)patch[k]={drop,upsert};
+    }
+    const delta={schema:1,format:"points-v1",base_revision:since,revision,as_of:full.as_of,patch,remove,full_etag:tag};
+    const dtag='"p-'+since+'-'+revision+'"';
+    if(JSON.stringify(delta).length<cached.payload.length)return request.headers.get("If-None-Match")===dtag?response(null,304,{...headers,ETag:dtag}):response(delta,200,{...headers,ETag:dtag});
+    return response(full,200,{...headers,ETag:tag});
+   }
+   const replace:Record<string,any>={};for(const [k,v] of Object.entries(full.series))if(JSON.stringify(v)!==JSON.stringify(prev[k]))replace[k]=v;const remove=Object.keys(prev).filter(k=>!(k in full.series));const delta={schema:1,base_revision:since,revision,as_of:full.as_of,replace,remove,full_etag:tag};const dtag='"d-'+since+'-'+revision+'"';return request.headers.get("If-None-Match")===dtag?response(null,304,{...headers,ETag:dtag}):response(delta,200,{...headers,ETag:dtag});}
  }
  return response(full,200,{...headers,ETag:tag});
 }

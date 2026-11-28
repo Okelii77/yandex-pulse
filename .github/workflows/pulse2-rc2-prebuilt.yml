@@ -1,0 +1,33 @@
+name: RC2 prepare one verified public Core
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-rc2-prebuilt.yml']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Build locked sources and verify loopback fixture
+        run: |
+          rustup toolchain install 1.100.1 --profile minimal
+          cargo +1.100.1 build --release --locked --manifest-path research/pulse2-rc/Cargo.toml --bin pulse-core-rc
+          python3 research/pulse2-control/run-rust-fixture.py
+          python3 research/pulse2-control/prebuilt-core.py --record
+          python3 research/pulse2-control/prebuilt-core.py
+      - name: Preserve one public binary, not an Actions storage artifact
+        run: |
+          set -eu
+          test "$GITHUB_REF" = refs/heads/research/pulse-architecture-20261128
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add -f research/results/pulse2/rc2-prebuilt/pulse-core-rc research/results/pulse2/rc2-prebuilt/manifest.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'RC2: archive verified single public native Core [skip ci]'
+          git push origin HEAD:refs/heads/research/pulse-architecture-20261128

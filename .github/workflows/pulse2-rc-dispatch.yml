@@ -31,13 +31,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12.16'
-      - name: Build locked Rust Core
+      - name: Verify prebuilt Core or build locked sources
         run: |
-          rustup toolchain install 1.100.1 --profile minimal
-          cargo +1.100.1 build --release --locked --manifest-path research/pulse2-rc/Cargo.toml --bin pulse-core-rc
+          set +e
+          python research/pulse2-control/prebuilt-core.py
+          code=$?
+          set -e
+          if [ "$code" = 2 ]; then
+            started=$(date +%s%3N)
+            rustup toolchain install 1.100.1 --profile minimal
+            cargo +1.100.1 build --release --locked --manifest-path research/pulse2-rc/Cargo.toml --bin pulse-core-rc
+            echo "RC2_BUILD_MS $(( $(date +%s%3N) - started ))"
+          elif [ "$code" != 0 ]; then
+            exit "$code"
+          fi
       - name: Synthetic staging snapshot (no Yandex requests)
         run: python research/pulse2-control/run-synthetic.py
         env:

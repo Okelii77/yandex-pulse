@@ -38,10 +38,26 @@
     const rcRevision=typeof lastHistory?.revision==="string"&&/^\d+-\d+$/.test(lastHistory.revision);
     if(historyRevision!==status.generated_at || Date.now()-historyLoadedAt>=300000 || rcRevision){
       try {
-        const suffix=rcRevision?"?since="+encodeURIComponent(lastHistory.revision):"";
+        const suffix=rcRevision?"?since="+encodeURIComponent(lastHistory.revision)+(settings.staging===true?"&format=points-v1":""):"";
         let h=await conditional("/api/history"+suffix,historyTag);
         if(!h.same){
           let data=h.data;
+          if(data?.format==="points-v1"){
+            if(!lastHistory||data.base_revision!==lastHistory.revision||typeof data.revision!=="string"||typeof data.full_etag!=="string"||!Array.isArray(data.remove)||!data.patch||typeof data.patch!=="object"){
+              h=await conditional("/api/history",null);data=h.data;
+            }else{
+              const series={...lastHistory.series};
+              for(const k of data.remove)delete series[k];
+              for(const [k,change] of Object.entries(data.patch)){
+                if(!/^[a-z][a-z0-9_-]{0,62}$/.test(k)||!Array.isArray(change.drop)||!Array.isArray(change.upsert))throw Error("Invalid history patch");
+                const by=new Map((series[k]||[]).map(x=>[x[0],x]));
+                for(const stamp of change.drop)by.delete(stamp);
+                for(const point of change.upsert){if(!Array.isArray(point)||point.length!==3||!Number.isFinite(Date.parse(point[0])))throw Error("Invalid history point");by.set(point[0],point);}
+                series[k]=[...by.values()].sort((a,b)=>a[0].localeCompare(b[0]));
+              }
+              h.tag=data.full_etag;data={schema:1,retention_days:30,revision:data.revision,as_of:data.as_of,series};
+            }
+          }
           if(data?.replace){
             if(!lastHistory||data.base_revision!==lastHistory.revision||typeof data.revision!=="string"||typeof data.full_etag!=="string"||!Array.isArray(data.remove)){
               h=await conditional("/api/history",null);data=h.data;
