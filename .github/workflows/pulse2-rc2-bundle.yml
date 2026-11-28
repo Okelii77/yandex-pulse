@@ -1,0 +1,34 @@
+name: RC2 locked cloud bundle
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-rc2-bundle.yml','research/pulse2-control/build-cloud-bundle.mjs']
+permissions:
+  contents: write
+jobs:
+  bundle:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22.23.5'
+      - name: Compile exact locked sources and include original PNG assets
+        working-directory: research/pulse2-control
+        run: |
+          npm ci --no-audit --no-fund
+          ./node_modules/.bin/tsc --target es2022 --module es2022 --outDir dist worker.ts
+          node build-cloud-bundle.mjs
+          node --check ../results/pulse2/rc2-cloud-bundle/worker.js
+      - name: Save only public staging bundle to research branch
+        run: |
+          set -eu
+          test "$GITHUB_REF" = refs/heads/research/pulse-architecture-20261128
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add research/results/pulse2/rc2-cloud-bundle/worker.js research/results/pulse2/rc2-cloud-bundle/manifest.json
+          git diff --cached --quiet && exit 0
+          git commit -m "RC2: archive locked compiled public cloud bundle [skip ci]"
+          git push origin HEAD:refs/heads/research/pulse-architecture-20261128
