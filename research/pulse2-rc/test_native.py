@@ -35,5 +35,15 @@ with tempfile.TemporaryDirectory() as d:
    payload=compose(catalog,r,{'results':adapters});assert len(payload['results'])==34
   data[name]={'cycles':len(measurements),'public_checks':len(expected),'samples_ms':measurements,'metrics':metrics,'p50_ms':statistics.median(measurements),'p95_ms':sorted(measurements)[__import__('math').ceil(len(measurements)*.95)-1]}
   pathlib.Path('fixture-status-'+name+'.json').write_text(json.dumps(payload))
+ # A trust failure must not be treated as a healthy TLS endpoint.
+ bad=json.loads(json.dumps(fixture))
+ for c in bad['checks']:
+  if c['kind']=='tcp_tls':c['port']=a.server_port
+  elif c['id']=='music-catalog':c['url']=f'https://127.0.0.1:{a.server_port}/200'
+ badfile=p/'bad.json';badfile.write_text(json.dumps(bad))
+ for cmd in ('target/release/pulse-core-rc','core-go'):
+  rr=json.loads(sp.check_output([str(root/cmd),'fixture',str(badfile)],env=env,timeout=25))
+  statuses={x['id']:x['status'] for x in rr['results']}
+  assert all(statuses[x]=='down' for x in ('mail-imap','mail-smtp','music-catalog'))
  for s in (a,b):s.shutdown();s.server_close()
  pathlib.Path('native-results.json').write_text(json.dumps(data,indent=2));pathlib.Path('fixture-status.json').write_text(json.dumps(payload));print('RC_NATIVE',json.dumps(data))

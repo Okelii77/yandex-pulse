@@ -1,0 +1,48 @@
+[
+  {
+    "runtime": "old",
+    "date": "2026-07-01",
+    "/ping": {
+      "status": 500,
+      "body": "Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/\n    at async Object.fetch (file:///home/runner/work/yandex-pulse/yandex-pulse/research/pulse2-edge/node_modules/miniflare/dist/src/workers/core/entry.worker.js:4765:22)"
+    },
+    "/": {
+      "status": 500,
+      "body": "Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/\n    at async Object.fetch (file:///home/runner/work/yandex-pulse/yandex-pulse/research/pulse2-edge/node_modules/miniflare/dist/src/workers/core/entry.worker.js:4765:22)"
+    }
+  },
+  {
+    "runtime": "new-same-date",
+    "date": "2026-07-01",
+    "modules": [
+      "index.js",
+      "index_bg.wasm",
+      "worker/shim.mjs"
+    ],
+    "/ping": {
+      "status": 200,
+      "body": "ping"
+    },
+    "/": {
+      "status": 200,
+      "body": "{\"count\":2,\"sum\":16}"
+    }
+  },
+  {
+    "runtime": "new-current-date",
+    "date": "2026-11-10",
+    "modules": [
+      "index.js",
+      "index_bg.wasm",
+      "worker/shim.mjs"
+    ],
+    "/ping": {
+      "status": 200,
+      "body": "ping"
+    },
+    "/": {
+      "status": 200,
+      "body": "{\"count\":2,\"sum\":16}"
+    }
+  }
+]
