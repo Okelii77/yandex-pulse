@@ -1,0 +1,44 @@
+[
+  {
+    "language": "rust",
+    "components": 34,
+    "acquire_start_ingest_ms": 21.221615999999926,
+    "acquire_to_api_ms": 24.73255299999994,
+    "browser_navigation_to_cards_ms": 489.25435800000014,
+    "conditional_requests": [
+      {
+        "path": "/api/status",
+        "status": 304,
+        "bytes": 0
+      },
+      {
+        "path": "/api/history",
+        "status": 304,
+        "bytes": 0
+      }
+    ],
+    "per_component_stale": true,
+    "passed": true
+  },
+  {
+    "language": "go",
+    "components": 34,
+    "acquire_start_ingest_ms": 13.679431000000477,
+    "acquire_to_api_ms": 16.63151000000107,
+    "browser_navigation_to_cards_ms": 235.67715099999987,
+    "conditional_requests": [
+      {
+        "path": "/api/status",
+        "status": 304,
+        "bytes": 0
+      },
+      {
+        "path": "/api/history",
+        "status": 304,
+        "bytes": 0
+      }
+    ],
+    "per_component_stale": true,
+    "passed": true
+  }
+]

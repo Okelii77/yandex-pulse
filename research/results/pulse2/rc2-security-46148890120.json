@@ -1,0 +1,5 @@
+{
+  "scanned": 210,
+  "findings": [],
+  "coverage": "Cargo registry lock, npm lock and Python resolved dependencies; not source-code or Go stdlib audit"
+}

@@ -1,0 +1,35 @@
+name: Archive audited RC2 locks
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-rc2-locks.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  archive:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: pulse2-rc2-security
+          run-id: 46148890120
+          github-token: ${{ github.token }}
+          path: /tmp/rc2-audited
+      - run: |
+          set -eu
+          test "$GITHUB_REF" = refs/heads/research/pulse-architecture-20261128
+          python -c 'import json; r=json.load(open("/tmp/rc2-audited/pulse2-control/security-results.json")); assert r["scanned"]==210 and not r["findings"]'
+          cp /tmp/rc2-audited/pulse2-rc/Cargo.lock research/pulse2-rc/Cargo.lock
+          cp /tmp/rc2-audited/pulse2-control/requirements.lock research/pulse2-control/requirements.lock
+          cp /tmp/rc2-audited/pulse2-control/package-lock.json research/pulse2-control/package-lock.json
+          cp /tmp/rc2-audited/pulse2-control/python-resolved.txt research/results/pulse2/rc2-python-resolved.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add research/pulse2-rc/Cargo.lock research/pulse2-control/requirements.lock research/pulse2-control/package-lock.json research/results/pulse2/rc2-python-resolved.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'RC2: archive audited dependency locks'
+          git push origin HEAD:refs/heads/research/pulse-architecture-20261128

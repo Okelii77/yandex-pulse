@@ -1,0 +1,22 @@
+{
+  "virtual_slots": 1489,
+  "publications": 1489,
+  "sample_rows": 44670,
+  "lease_contenders": 32,
+  "start_contenders": 16,
+  "history_contenders": 12,
+  "dispatches": 1,
+  "publish_p50_ms": 8.285783999999694,
+  "publish_p95_ms": 11.66298100000131,
+  "history_revision": "1489-1795872600000",
+  "passed": true,
+  "retention_90_30": true,
+  "manual_dispatches": 1,
+  "excluded_components": [
+    "music-ynison",
+    "maps-geocoder",
+    "ai-speech",
+    "ai-vision"
+  ],
+  "rows_per_component": 1489
+}
