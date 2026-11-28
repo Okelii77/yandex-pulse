@@ -113,7 +113,7 @@ export async function githubOidcIdentity(token: string, now=Date.now(), load:typ
 
 
 // Private, bounded diagnostic evidence; no raw claims, kid, JWT, URL or headers.
-const OIDC_DIAG_VERSION="rc2-oidc-diagnostic-1";
+const OIDC_DIAG_VERSION="rc2-oidc-diagnostic-2";
 async function auditOidc(db:DB,now:number,ray:string,steps:any[]){
  try{
   if(!await reserveBudget(db,now,0,0,80,4))return;
@@ -127,12 +127,14 @@ async function probeRuntime(db:DB,now:number){
  if(!claim)return;
  const out:any={version:OIDC_DIAG_VERSION,timeout_available:typeof AbortSignal.timeout==="function",crypto_available:!!crypto.subtle,checks:[]};
  try{
-  for(const mode of ["original","explicit_headers"]){
+  for(const mode of ["minimal","redirect_error","signal_only","original","explicit_headers"]){
    const row:any={mode};out.checks.push(row);let stage="fetch";
    try{
-    const init:RequestInit={redirect:"error",signal:AbortSignal.timeout(5000)};
-    if(mode==="original")init.cache="no-store";
-    else init.headers={"Cache-Control":"no-cache","User-Agent":"YandexPulse-Scheduler/2.0","Accept":"application/json"};
+    const init:RequestInit={redirect:"manual"};
+    if(mode==="redirect_error")init.redirect="error";
+    if(["signal_only","original","explicit_headers"].includes(mode))init.signal=AbortSignal.timeout(5000);
+    if(mode==="original"){init.redirect="error";init.cache="no-store";}
+    if(mode==="explicit_headers"){init.redirect="error";init.headers={"Cache-Control":"no-cache","User-Agent":"YandexPulse-Scheduler/2.0","Accept":"application/json"};}
     const r=await fetch("https://token.actions.githubusercontent.com/.well-known/jwks",init);
     row.http=r.status;if(!r.ok)continue;stage="json";const jwks:any=await r.json();
     row.keys=Array.isArray(jwks.keys)?jwks.keys.length:0;
@@ -147,7 +149,11 @@ async function probeRuntime(db:DB,now:number){
      if(!await crypto.subtle.verify({name:"RSASSA-PKCS1-v1_5"},key,new Uint8Array(bits/8),new Uint8Array([1,2,3])))row.verify_false++;
     }
     row.done=true;
-   }catch(e){row.failure=stage;row.kind=e instanceof TypeError?"TypeError":e instanceof DOMException?e.name==="AbortError"?"AbortError":e.name==="TimeoutError"?"TimeoutError":"DOMException":"Other";}
+   }catch(e){row.failure=stage;const message=e instanceof Error?e.message:"";const patterns=[["unsupported_cache",/unsupported cache mode|cache.*unsupported/i],["illegal_invocation",/illegal invocation|incompatible receiver/i],["request_context",/different request|I\/O objects|asynchronous I\/O/i],["network",/network connection lost|network error|fetch failed|connection reset|connection refused|connection closed/i],["dns",/DNS|resolve host|name resolution/i],["tls",/TLS|SSL|certificate/i],["redirect",/redirect/i],["signal",/AbortSignal|signal|aborted|timeout/i],["policy",/not allowed|blocked|denied|disallowed|restricted|prohibited/i],["fetch_implementation",/not implemented|not supported/i]];
+    row.message_category=patterns.find((x:any)=>x[1].test(message))?.[0]||"unclassified";
+    // Fixed public endpoint, no credentials. Only exact, known runtime messages may be retained.
+    if(["fetch failed","Network connection lost.","Illegal invocation","The operation was aborted.","Unsupported cache mode: no-store","Network connection lost","Failed to fetch","The operation timed out."].includes(message))row.known_message=message;
+    row.kind=e instanceof TypeError?"TypeError":e instanceof DOMException?e.name==="AbortError"?"AbortError":e.name==="TimeoutError"?"TimeoutError":"DOMException":"Other";}
   }
  }finally{
   await db.prepare("UPDATE rc_oidc_probe SET state='done',result=? WHERE id=1 AND state='running'").bind(JSON.stringify(out)).run();
@@ -256,9 +262,9 @@ async function authorized(req:Request,env:Env){
  const token=req.headers.get("Authorization")||"";
  if(env.RC_LOCAL_ONLY==="1")return env.LOCAL_TOKEN&&token==="Bearer "+env.LOCAL_TOKEN?{owner:"fixture"}:null;
  const steps:any[]=[];const trace=(code:string,status?:number)=>steps.push(status===undefined?{code}:{code,status});
- if(!token.startsWith("Bearer ")){trace("authorization_missing_or_scheme");return null;}
- trace("authorization_ok");
  try{
+  if(!token.startsWith("Bearer ")){trace("authorization_missing_or_scheme");return null;}
+  trace("authorization_ok");
   const id=await githubOidcIdentity(token.slice(7),Date.now(),fetch,trace);
   if(!id)return null;
   trace("d1_consume_begin");
