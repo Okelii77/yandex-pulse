@@ -60,7 +60,10 @@ const b64url = (input) => {
     const decoded = atob(str + "=".repeat((4 - str.length % 4) % 4));
     return Uint8Array.from(decoded, c => c.charCodeAt(0));
 };
-export async function githubOidcIdentity(token, now = Date.now(), load = fetch, trace = () => { }) {
+const isolateJwks = { keys: [], expires: 0, refreshed: 0 };
+// Completed public key material only, no I/O promises or tokens shared across requests.
+const JWKS_TTL = 60000, JWKS_REFRESH_MIN = 5000;
+export async function githubOidcIdentity(token, now = Date.now(), load = fetch, trace = () => { }, cache = load === fetch ? isolateJwks : null) {
     const audience = "yandex-pulse-rc-ingest", workflow = "pulse2-rc-dispatch.yml";
     let stage = 'jwt_shape';
     const deny = (code) => { trace(code); return null; };
@@ -94,16 +97,36 @@ export async function githubOidcIdentity(token, now = Date.now(), load = fetch, 
             return deny("claims_rejected");
         trace("claims_ok");
         stage = "jwks_fetch";
-        const response = await load("https://token.actions.githubusercontent.com/.well-known/jwks", {
-            redirect: "manual", signal: AbortSignal.timeout(5000), headers: { "Cache-Control": "no-cache", "Accept": "application/json", "User-Agent": "YandexPulse-Scheduler/2.0" }
-        });
-        trace("jwks_http", response.status);
-        if (response.status !== 200)
-            return deny("jwks_http_rejected");
-        stage = "jwks_json";
-        const jwks = await response.json();
-        stage = "jwks_key";
-        const jwk = (jwks.keys || []).find((x) => x.kid === header.kid && x.kty === "RSA" && x.use === "sig");
+        const find = (keys) => keys.find(x => x.kid === header.kid && x.kty === "RSA" && x.use === "sig");
+        let jwk = cache && now < cache.expires ? find(cache.keys) : null;
+        if (jwk)
+            trace("jwks_cache_hit");
+        else {
+            // Refresh expired cache or unknown kid, at most once per five seconds per isolate.
+            // Never use stale keys after expiry, never follow redirects, never accept a caller-supplied URL.
+            if (cache && now < cache.expires && now - cache.refreshed < JWKS_REFRESH_MIN)
+                return deny("jwks_key_missing");
+            if (cache)
+                cache.refreshed = now;
+            const response = await load("https://token.actions.githubusercontent.com/.well-known/jwks", {
+                redirect: "manual", signal: AbortSignal.timeout(5000), headers: { "Cache-Control": "no-cache", "Accept": "application/json", "User-Agent": "YandexPulse-Scheduler/2.0" }
+            });
+            trace("jwks_http", response.status);
+            if (response.status !== 200)
+                return deny("jwks_http_rejected");
+            stage = "jwks_json";
+            const jwks = await response.json();
+            if (!Array.isArray(jwks.keys) || jwks.keys.length > 32)
+                return deny("jwks_json_exception");
+            const keys = jwks.keys;
+            if (cache) {
+                cache.keys = keys;
+                cache.expires = now + JWKS_TTL;
+                cache.refreshed = now;
+            }
+            stage = "jwks_key";
+            jwk = find(keys);
+        }
         if (!jwk)
             return deny("jwks_key_missing");
         trace("jwks_key_ok");
@@ -122,7 +145,7 @@ export async function githubOidcIdentity(token, now = Date.now(), load = fetch, 
     }
 }
 // Private, bounded diagnostic evidence; no raw claims, kid, JWT, URL or headers.
-const OIDC_DIAG_VERSION = "rc2-oidc-jwks-manual-1";
+const OIDC_DIAG_VERSION = "rc2-stage5-ops-1";
 async function auditOidc(db, now, ray, steps) {
     try {
         if (!await reserveBudget(db, now, 0, 0, 80, 4))
@@ -147,14 +170,22 @@ export async function consumeOidc(db, id) {
     const r = await db.prepare("INSERT OR IGNORE INTO rc_oidc_used(jti,expires) VALUES(?,?) RETURNING jti").bind(id.jti, id.expires).first();
     return !!r;
 }
+// Observation window is opt-in; no dispatch outside the exact 168-hour aligned range.
+export function observationWindow(env, now) {
+    const start = Number(env.RC_OBSERVE_START), end = Number(env.RC_OBSERVE_END);
+    const valid = Number.isSafeInteger(start) && start > 0 && start % SLOT === 0 && end === start + 7 * DAY;
+    return { valid, active: valid && now >= start && now < end && env.RC_PAUSED !== "1" && env.RC_MODE === "synthetic", start, end };
+}
 async function budgetedAcquire(env, now, owner) {
-    const claim = await acquire(env.DB, now, owner);
-    if (!claim)
-        return null;
+    const day = Math.floor(now / DAY) * DAY, slot = epoch(now), token = crypto.randomUUID();
     const max = Math.max(1, Math.min(BUDGET.launch, Number(env.RC_MAX_LAUNCHES) || 1));
-    if (!await reserveBudget(env.DB, now, 0, 1, 64, 8, max))
-        return null;
-    return claim;
+    const attempts = observationWindow(env, now).valid ? 1 : 2;
+    // Both statements execute atomically in D1. A denied budget cannot create an orphan lease.
+    const b = await env.DB.batch([
+        env.DB.prepare("INSERT INTO rc_lease(slot,token,expires,state,owner) SELECT ?,?,?,'reserved',? WHERE NOT EXISTS(SELECT 1 FROM rc_latest WHERE slot>=?) AND NOT EXISTS(SELECT 1 FROM rc_lease WHERE state IN ('reserved','running') AND expires>? AND slot!=?) AND COALESCE((SELECT launch FROM rc_daily_budget WHERE day=?),0)<? AND COALESCE((SELECT reads FROM rc_daily_budget WHERE day=?),0)+64<=? AND COALESCE((SELECT writes FROM rc_daily_budget WHERE day=?),0)+8<=? ON CONFLICT(slot) DO UPDATE SET token=excluded.token,expires=excluded.expires,state='reserved',attempts=rc_lease.attempts+1,owner=excluded.owner,started_at=NULL,dispatch_ms=NULL,dispatch_at=NULL,finished_at=NULL WHERE rc_lease.state!='done' AND rc_lease.attempts<? AND rc_lease.expires<=?").bind(slot, token, now + LEASE, owner ?? null, slot, now, slot, day, max, day, BUDGET.reads, day, BUDGET.writes, attempts, now),
+        env.DB.prepare("INSERT INTO rc_daily_budget(day,api,launch,reads,writes) SELECT ?,0,1,64,8 WHERE EXISTS(SELECT 1 FROM rc_lease WHERE slot=? AND token=?) ON CONFLICT(day) DO UPDATE SET launch=rc_daily_budget.launch+1,reads=rc_daily_budget.reads+64,writes=rc_daily_budget.writes+8").bind(day, slot, token)
+    ]);
+    return b[0].meta.changes === 1 && b[1].meta.changes === 1 ? { slot, token } : null;
 }
 export async function acquire(db, now, owner = null) {
     const slot = epoch(now), token = crypto.randomUUID();
@@ -247,15 +278,27 @@ export async function history(db, request, now, headers = {}) {
 export async function tick(env, now, send = fetch) {
     if (env.RC_ENABLE_DISPATCH !== "1" || !env.RC_GITHUB_TOKEN || (env.RC_LOCAL_ONLY === "1" && send === fetch))
         return { action: "disabled" };
+    if (env.RC_LOCAL_ONLY !== "1" && !observationWindow(env, now).active)
+        return { action: "outside_window" };
     const claim = await budgetedAcquire(env, now);
     if (!claim)
         return { action: "skip" };
     const began = Date.now();
     await env.DB.prepare("UPDATE rc_lease SET dispatch_at=? WHERE slot=? AND token=?").bind(now, claim.slot, claim.token).run();
     try {
-        const r = await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches", { method: "POST", redirect: "error", signal: AbortSignal.timeout(10000), headers: { Authorization: "Bearer " + env.RC_GITHUB_TOKEN, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "YandexPulse-Scheduler/2.0", "Content-Type": "application/json" }, body: JSON.stringify({ ref: "research/pulse-architecture-20261128", inputs: { slot: String(claim.slot), lease: claim.token } }) });
+        const r = await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches", { method: "POST", redirect: "manual", signal: AbortSignal.timeout(10000), headers: { Authorization: "Bearer " + env.RC_GITHUB_TOKEN, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "YandexPulse-Scheduler/2.0", "Content-Type": "application/json" }, body: JSON.stringify({ ref: "research/pulse-architecture-20261128", inputs: { slot: String(claim.slot), lease: claim.token } }) });
         await env.DB.prepare("UPDATE rc_lease SET dispatch_ms=? WHERE slot=? AND token=?").bind(Date.now() - began, claim.slot, claim.token).run();
-        return { action: r.ok ? "accepted" : "uncertain_wait_for_expiry", slot: claim.slot };
+        let runId = null;
+        if (r.status === 200) {
+            try {
+                const x = await r.json();
+                if (Number.isSafeInteger(x.workflow_run_id) && x.workflow_run_id > 0)
+                    runId = String(x.workflow_run_id);
+            }
+            catch { }
+        }
+        await env.DB.prepare("INSERT OR REPLACE INTO rc_dispatch_evidence(slot,at,http_status,run_id) VALUES(?,?,?,?)").bind(claim.slot, now, r.status, runId).run();
+        return { action: r.status === 200 || r.status === 204 ? "accepted" : "uncertain_wait_for_expiry", slot: claim.slot };
     }
     catch {
         return { action: "uncertain_wait_for_expiry", slot: claim.slot };
@@ -264,7 +307,8 @@ export async function tick(env, now, send = fetch) {
 export async function manualTrigger(request, env, now, send = fetch) {
     if (!env.RC_ORIGIN || request.headers.get("Origin") !== env.RC_ORIGIN)
         return response({ error: "forbidden_origin" }, 403);
-    if (env.RC_ENABLE_DISPATCH !== "1" || !env.RC_GITHUB_TOKEN || !env.RC_TURNSTILE_SECRET || !env.RC_TURNSTILE_SITE_KEY)
+    const verifyOnly = env.RC_TURNSTILE_VERIFY_ONLY === "1" && env.RC_ENABLE_DISPATCH !== "1";
+    if ((!verifyOnly && (env.RC_ENABLE_DISPATCH !== "1" || !env.RC_GITHUB_TOKEN || (env.RC_LOCAL_ONLY !== "1" && !observationWindow(env, now).active))) || !env.RC_TURNSTILE_SECRET || !env.RC_TURNSTILE_SITE_KEY)
         return response({ error: "trigger_not_configured" }, 503);
     let body;
     try {
@@ -278,11 +322,23 @@ export async function manualTrigger(request, env, now, send = fetch) {
     }
     if (typeof body?.turnstileToken !== "string" || !body.turnstileToken || body.turnstileToken.length > 2048)
         return response({ error: "turnstile_failed" }, 403);
-    const verified = await send("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", redirect: "error", signal: AbortSignal.timeout(8000), body: new URLSearchParams({ secret: env.RC_TURNSTILE_SECRET, response: body.turnstileToken }) });
+    if (verifyOnly) {
+        const q = await env.DB.prepare("UPDATE rc_turnstile_probe SET state='running' WHERE id=1 AND state='armed' AND expires>? RETURNING id").bind(now).first();
+        if (!q)
+            return response({ error: "trigger_not_configured" }, 503);
+    }
+    const verified = await send("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", redirect: "manual", signal: AbortSignal.timeout(8000), body: new URLSearchParams({ secret: env.RC_TURNSTILE_SECRET, response: body.turnstileToken }) });
     if (!verified.ok)
         return response({ error: "turnstile_unavailable" }, 503);
     const v = await verified.json();
-    if (v.success !== true || v.hostname !== new URL(env.RC_ORIGIN).hostname)
+    const accepted = v.success === true && v.hostname === new URL(env.RC_ORIGIN).hostname;
+    if (verifyOnly) {
+        const allowed = new Set(["missing-input-secret", "invalid-input-secret", "missing-input-response", "invalid-input-response", "bad-request", "timeout-or-duplicate", "internal-error"]);
+        const codes = Array.isArray(v["error-codes"]) ? v["error-codes"].filter((x) => allowed.has(x)) : [];
+        await env.DB.prepare("UPDATE rc_turnstile_probe SET state='done',result=? WHERE id=1 AND state='running'").bind(JSON.stringify({ http: verified.status, accepted, codes })).run();
+        return response({ error: "trigger_not_configured" }, 503); // No dispatch even for a valid human token.
+    }
+    if (!accepted)
         return response({ error: "turnstile_failed" }, 403);
     const row = await env.DB.prepare("INSERT INTO rc_manual_gate(id,last_at) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET last_at=excluded.last_at WHERE rc_manual_gate.last_at<=? RETURNING last_at").bind(now, now - 600000).first();
     if (!row)
@@ -361,9 +417,11 @@ export default {
                 const identity = await authorized(req, env);
                 if (!identity)
                     return response({ error: "unauthorized" }, 401, cors);
-                if (env.RC_LOCAL_ONLY !== "1" && env.RC_ENABLE_INGEST !== "1" && env.RC_ENABLE_DISPATCH !== "1")
+                if (env.RC_LOCAL_ONLY !== "1" && ((env.RC_ENABLE_INGEST !== "1" && env.RC_ENABLE_DISPATCH !== "1") || env.RC_PAUSED === "1" || (observationWindow(env, now).valid && !observationWindow(env, now).active)))
                     return response({ error: "staging_disabled" }, 503, cors);
                 if (path.endsWith("acquire")) {
+                    if (env.RC_LOCAL_ONLY !== "1" && observationWindow(env, now).active)
+                        return response({ error: "scheduled_lease_required" }, 409, cors);
                     const claim = await budgetedAcquire(env, now, identity.owner);
                     return response(claim || { error: "busy_or_budget" }, claim ? 200 : 409, cors);
                 }
