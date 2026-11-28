@@ -1,0 +1,38 @@
+name: Rust Worker compatibility diagnosis (offline)
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['research/pulse2-edge/diagnose-rust.mjs','.github/workflows/pulse2-edge-diagnosis.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: research/pulse2-edge
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund && npm install --no-save --no-audit --no-fund miniflare-new@npm:miniflare@5.20261110.1-beta
+      - run: |
+          mkdir -p evidence
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+          cargo install worker-build --version 0.9.0 --locked
+          cd rust-worker
+          worker-build --release
+      - run: node diagnose-rust.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-edge-diagnosis
+          retention-days: 1
+          if-no-files-found: warn
+          path: research/pulse2-edge/evidence/rust-diagnosis.json
