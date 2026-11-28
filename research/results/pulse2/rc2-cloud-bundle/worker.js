@@ -146,7 +146,7 @@ export async function githubOidcIdentity(token, now = Date.now(), load = fetch, 
     }
 }
 // Private, bounded diagnostic evidence; no raw claims, kid, JWT, URL or headers.
-const OIDC_DIAG_VERSION = "rc2-stage6-preflight-1";
+const OIDC_DIAG_VERSION = "rc2-stage6-preflight-2";
 async function auditOidc(db, now, ray, steps) {
     try {
         if (!await reserveBudget(db, now, 0, 0, 80, 4))
@@ -173,9 +173,10 @@ export async function consumeOidc(db, id) {
 }
 // Observation window is opt-in; no dispatch outside the exact 168-hour aligned range.
 export function observationWindow(env, now) {
-    const start = Number(env.RC_OBSERVE_START), end = Number(env.RC_OBSERVE_END);
-    const valid = Number.isSafeInteger(start) && start > 0 && start % SLOT === 0 && end === start + 7 * DAY;
-    return { valid, active: valid && now >= start && now < end && env.RC_PAUSED !== "1" && env.RC_MODE === "synthetic", start, end };
+    const preflight = env.RC_PREFLIGHT_SLOT !== undefined && env.RC_PREFLIGHT_SLOT !== "";
+    const start = Number(preflight ? env.RC_PREFLIGHT_SLOT : env.RC_OBSERVE_START), end = preflight ? start + SLOT : Number(env.RC_OBSERVE_END);
+    const valid = Number.isSafeInteger(start) && start > 0 && start % SLOT === 0 && (preflight ? (!env.RC_OBSERVE_START && !env.RC_OBSERVE_END && env.RC_MAX_LAUNCHES === "1") : end === start + 7 * DAY);
+    return { valid, active: valid && now >= start && now < end && env.RC_PAUSED !== "1" && env.RC_MODE === "synthetic", start, end, preflight };
 }
 async function budgetedAcquire(env, now, owner) {
     const day = Math.floor(now / DAY) * DAY, slot = epoch(now), token = crypto.randomUUID();
@@ -351,7 +352,7 @@ export async function recoverUnsent(db, slot, now) {
     const r = await db.prepare("UPDATE rc_lease SET token=?,expires=?,attempts=attempts+1 WHERE slot=? AND state='reserved' AND owner IS NULL AND dispatch_at IS NULL AND expires<=? AND attempts<2 AND NOT EXISTS(SELECT 1 FROM rc_dispatch_evidence WHERE slot=?) RETURNING token").bind(token, Math.min(now + LEASE, slot + SLOT), slot, now, slot).first();
     return r ? { slot, token } : null;
 }
-export async function reconcileDispatch(env, slot, now, send = fetch) {
+export async function reconcileDispatch(env, slot, now, send = fetch, observedRun) {
     // Never issue a second POST for an ambiguous send. Reconcile the original run by a unique
     // public correlation label (not a bearer credential), pinned commit, branch, workflow and event.
     const lease = await env.DB.prepare("SELECT state,owner,expires,dispatch_at,dispatch_id FROM rc_lease WHERE slot=?").bind(slot).first();
@@ -360,7 +361,10 @@ export async function reconcileDispatch(env, slot, now, send = fetch) {
     if (!validPin(env))
         return { action: "pin_missing" };
     const evidence = await env.DB.prepare("SELECT run_id FROM rc_dispatch_evidence WHERE slot=?").bind(slot).first();
-    const known = typeof evidence?.run_id === "string" && /^\d{1,20}$/.test(evidence.run_id) ? evidence.run_id : null;
+    const recorded = typeof evidence?.run_id === "string" && /^\d{1,20}$/.test(evidence.run_id) ? evidence.run_id : null;
+    if (observedRun && (!/^\d{1,20}$/.test(observedRun) || (recorded && recorded !== observedRun)))
+        return { action: "skip" };
+    const known = recorded || observedRun || null;
     try {
         const path = known ? "https://api.github.com/repos/Okelii77/yandex-pulse/actions/runs/" + known : DISPATCH_URL + "/runs?" + new URLSearchParams({ branch: DISPATCH_BRANCH, event: "workflow_dispatch", head_sha: env.RC_PINNED_SHA, per_page: "20", created: ">=" + iso(lease.dispatch_at - 60000) });
         const res = await send(path, { redirect: "manual", signal: AbortSignal.timeout(5000), headers: githubHeaders(env) });
@@ -369,7 +373,7 @@ export async function reconcileDispatch(env, slot, now, send = fetch) {
         const json = await res.json(), all = known ? [json] : json.workflow_runs;
         if (!Array.isArray(all) || all.length > 20)
             return { action: "reconcile_unavailable" };
-        const matches = all.filter((x) => x.display_title === "RC2 " + slot + " " + lease.dispatch_id && x.head_sha === env.RC_PINNED_SHA && x.head_branch === DISPATCH_BRANCH && x.event === "workflow_dispatch" && x.run_attempt === 1 && Number.isSafeInteger(x.id) && x.id > 0 && Date.parse(x.created_at) >= lease.dispatch_at - 60000 && Date.parse(x.created_at) < slot + SLOT && (!known || String(x.id) === known));
+        const matches = all.filter((x) => x.display_title === "RC2 " + slot + " " + lease.dispatch_id && x.head_sha === env.RC_PINNED_SHA && x.head_branch === DISPATCH_BRANCH && x.event === "workflow_dispatch" && x.path === ".github/workflows/pulse2-rc-dispatch.yml" && x.run_attempt === 1 && Number.isSafeInteger(x.id) && x.id > 0 && Date.parse(x.created_at) >= lease.dispatch_at - 60000 && Date.parse(x.created_at) < slot + SLOT && (!known || String(x.id) === known));
         if (matches.length !== 1)
             return { action: "uncertain_no_resend" };
         const run = matches[0], id = String(run.id);
@@ -449,7 +453,7 @@ export async function tick(env, now, send = fetch) {
 export async function manualTrigger(request, env, now, send = fetch) {
     if (!env.RC_ORIGIN || request.headers.get("Origin") !== env.RC_ORIGIN)
         return response({ error: "forbidden_origin" }, 403);
-    const verifyOnly = env.RC_TURNSTILE_VERIFY_ONLY === "1" && env.RC_ENABLE_DISPATCH !== "1";
+    const verifyOnly = env.RC_TURNSTILE_VERIFY_ONLY === "1" && env.RC_ENABLE_DISPATCH !== "1" && env.RC_ENABLE_INGEST !== "1" && env.RC_PAUSED === "1";
     if ((!verifyOnly && (env.RC_ENABLE_DISPATCH !== "1" || !env.RC_GITHUB_TOKEN || (env.RC_LOCAL_ONLY !== "1" && !observationWindow(env, now).active))) || !env.RC_TURNSTILE_SECRET || !env.RC_TURNSTILE_SITE_KEY)
         return response({ error: "trigger_not_configured" }, 503);
     let body;
@@ -533,6 +537,15 @@ export default {
                 return new Response(null, { status: 204, headers: cors });
             if (path.startsWith("/api/") && !await reserveBudget(env.DB, now, 1, 0, 32, 2))
                 return response({ error: "staging_budget_exhausted" }, 429, { ...cors, "Retry-After": "3600" });
+            if (req.method === "GET" && path === "/rc2-turnstile-check") {
+                if (env.RC_TURNSTILE_VERIFY_ONLY !== "1" || env.RC_ENABLE_DISPATCH === "1" || env.RC_ENABLE_INGEST === "1" || env.RC_PAUSED !== "1")
+                    return response({ error: "not_found" }, 404);
+                const sitekey = env.RC_TURNSTILE_SITE_KEY;
+                if (!sitekey || !/^[A-Za-z0-9_-]{10,100}$/.test(sitekey))
+                    return response({ error: "trigger_not_configured" }, 503);
+                const html = '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RC2 — Turnstile preflight</title><body style="font-family:system-ui;max-width:600px;margin:40px auto;padding:16px"><h1>Yandex Pulse RC2 — проверка Turnstile</h1><p>Только проверка безопасности. Мониторинг, GitHub dispatch и публикации отключены. После подтверждения сообщите в чат.</p><div id="widget"></div><p id="result" role="status">Ожидание подтверждения…</p><script>window.ready=function(){turnstile.render("#widget",{sitekey:' + JSON.stringify(sitekey) + ',action:"pulse-rc-trigger",callback:async function(token){try{const r=await fetch("/api/trigger",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({turnstileToken:token})});document.getElementById("result").textContent=r.status===503?"Проверка отправлена. Запуск мониторинга отключён.":"Проверка отклонена. Сообщите в чат.";}catch{document.getElementById("result").textContent="Ошибка сети.";}}});};</script><script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=ready&render=explicit" async defer></script></body></html>';
+                return new Response(html, { headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'" } });
+            }
             if (req.method === "GET" && path === "/api/health") {
                 const row = await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();
                 const lease = await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();
@@ -566,7 +579,13 @@ export default {
                 if (path.endsWith("acquire")) {
                     if (env.RC_LOCAL_ONLY !== "1" && observationWindow(env, now).active) {
                         const data = await req.json().catch(() => null);
-                        const claim = await scheduledClaim(env.DB, data?.slot, identity.owner, now);
+                        let claim = await scheduledClaim(env.DB, data?.slot, identity.owner, now);
+                        if (!claim && data?.slot === epoch(now) && /^\d{1,20}:1$/.test(identity.owner) && await accountQuotaGuard(env, now) === "ok") {
+                            // A real signed runner can recover a missing dispatch response immediately, by querying
+                            // its exact run ID and comparing the durable correlation label, commit and workflow.
+                            await reconcileDispatch(env, data.slot, now, fetch, identity.owner.split(":")[0]);
+                            claim = await scheduledClaim(env.DB, data.slot, identity.owner, now);
+                        }
                         return response(claim || { error: "scheduled_lease_unavailable" }, claim ? 200 : 409, cors);
                     }
                     const claim = await budgetedAcquire(env, now, identity.owner);
