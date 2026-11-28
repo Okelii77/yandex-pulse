@@ -1,4 +1,4 @@
-import {Miniflare} from 'miniflare';import {readFile,writeFile} from 'node:fs/promises';import assert from 'node:assert/strict';import {performance} from 'node:perf_hooks';import {acquire,start,publish,history,tick,maintenance,manualTrigger,reserveBudget,consumeOidc,githubOidcIdentity,observationWindow,scheduledClaim,accountQuotaGuard} from './dist/worker.js';
+import {Miniflare} from 'miniflare';import {readFile,writeFile} from 'node:fs/promises';import assert from 'node:assert/strict';import {performance} from 'node:perf_hooks';import {acquire,start,publish,history,tick,maintenance,manualTrigger,reserveBudget,consumeOidc,githubOidcIdentity,observationWindow,scheduledClaim,accountQuotaGuard,recoverUnsent,reconcileDispatch} from './dist/worker.js';
 const mf=new Miniflare({modules:true,scriptPath:process.cwd()+'/dist/worker.js',compatibilityDate:'2026-07-01',d1Databases:{DB:'rc-control-local'},bindings:{RC_LOCAL_ONLY:'1',LOCAL_TOKEN:'fixture-only'},cf:false});const now=Math.floor(Date.now()/1800000)*1800000+1000;
 const catalog=JSON.parse(await readFile('../../monitor/services.json','utf8'));const fixture=t=>({...catalog,generated_at:new Date(t).toISOString(),results:catalog.checks.map(c=>({id:c.id,status:c.kind==='music_ynison'||['maps-geocoder','ai-speech','ai-vision'].includes(c.id)?'disabled':'ok',checked_at:new Date(t).toISOString(),latency_ms:12}))});
 const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(const sql of (await readFile('schema.sql','utf8')).trim().split(/;\s*/).filter(Boolean))await db.prepare(sql).run();
@@ -65,13 +65,13 @@ const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(co
  summary.manual_dispatches=manualDispatches;summary.excluded_components=['music-ynison','maps-geocoder','ai-speech','ai-vision'];summary.rows_per_component=slots+1;
  const owned=await acquire(db,bd+1800000,'owner-a');assert(owned);assert.equal(await start(db,owned,bd+1800000,'owner-b'),false);assert(await start(db,owned,bd+1800000,'owner-a'));assert.equal(await publish(db,owned,fixture(bd+1800000),bd+1800000,'owner-b'),false);assert(await publish(db,owned,fixture(bd+1800000),bd+1800000,'owner-a'));summary.owner_fencing=true;
  const windowStart=Math.floor((v+50*86400000)/1800000)*1800000;
- const windowEnv={DB:db,RC_MODE:'synthetic',RC_OBSERVE_START:String(windowStart),RC_OBSERVE_END:String(windowStart+7*86400000),RC_ENABLE_DISPATCH:'1',RC_GITHUB_TOKEN:'fixture-only',RC_MAX_LAUNCHES:'1',RC_CF_ACCOUNT_ID:'a'.repeat(32),RC_CF_ANALYTICS_TOKEN:'fixture-only'};
+ const windowEnv={DB:db,RC_MODE:'synthetic',RC_OBSERVE_START:String(windowStart),RC_OBSERVE_END:String(windowStart+7*86400000),RC_ENABLE_DISPATCH:'1',RC_GITHUB_TOKEN:'fixture-only',RC_MAX_LAUNCHES:'1',RC_PINNED_SHA:'b'.repeat(40),RC_CF_ACCOUNT_ID:'a'.repeat(32),RC_CF_ANALYTICS_TOKEN:'fixture-only'};
  assert.equal(observationWindow(windowEnv,windowStart-1).active,false);assert(observationWindow(windowEnv,windowStart).active);assert.equal(observationWindow(windowEnv,windowStart+7*86400000).active,false);
  assert.equal((await tick(windowEnv,windowStart-1,fake)).action,'outside_window');
  const analytics=(requests=100,reads=1000,writes=100)=>Response.json({data:{viewer:{accounts:[{workersInvocationsAdaptive:[{sum:{requests}}],d1AnalyticsAdaptiveGroups:[{sum:{rowsRead:reads,rowsWritten:writes}}]}]}}});
  assert.equal(await accountQuotaGuard({...windowEnv,RC_CF_ANALYTICS_TOKEN:''},windowStart,async()=>{throw Error('must not request')}),'analytics_not_configured');
  assert.equal(await accountQuotaGuard(windowEnv,windowStart,async()=>new Response('',{status:503})),'analytics_unavailable');
- const dispatchFixture=async(url,opts)=>{if(url==='https://api.cloudflare.com/client/v4/graphql')return analytics();const body=JSON.parse(opts.body);assert.equal(body.inputs.lease,'');assert.equal(opts.redirect,'manual');return Response.json({workflow_run_id:789});};
+ const dispatchFixture=async(url,opts)=>{if(url==='https://api.cloudflare.com/client/v4/graphql')return analytics();const body=JSON.parse(opts.body);assert.match(body.inputs.lease,/^[a-f0-9-]{36}$/);assert.equal(opts.redirect,'manual');return Response.json({workflow_run_id:789});};
  assert.equal((await tick(windowEnv,windowStart,dispatchFixture)).action,'accepted');
  assert.equal(await scheduledClaim(db,windowStart,'123:1',windowStart),null);
  assert.equal(await scheduledClaim(db,windowStart,'789:2',windowStart),null);
@@ -88,5 +88,24 @@ const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(co
  assert.equal(await accountQuotaGuard(quotaEnv,nextWindow+1,async()=>{throw Error('paused must not request')}),'quota_paused');
  assert.equal((await tick(quotaEnv,nextWindow+2,async()=>{throw Error('paused must not dispatch')})).action,'quota_paused');
  summary.shared_quota_guard=true;
+ const recoverSlot=windowStart+86400000;
+ const unsent=await acquire(db,recoverSlot);assert(unsent);
+ const recovered=await Promise.all(Array.from({length:8},()=>recoverUnsent(db,recoverSlot,recoverSlot+600001)));assert.equal(recovered.filter(Boolean).length,1);
+ assert.equal(await start(db,unsent,recoverSlot+600002,'fixture'),false);
+ const rec=recovered.find(Boolean);assert(rec&&rec.token!==unsent.token);
+ const uncertainSlot=recoverSlot+1800000;
+ const uncertainEnv={...windowEnv,RC_MAX_LAUNCHES:'48'};
+ const uncertain=await tick(uncertainEnv,uncertainSlot,async(url)=>{if(url.includes('graphql'))return analytics();throw Error('network after POST');});
+ assert.equal(uncertain.action,'uncertain_wait_for_expiry');
+ const row=await db.prepare('SELECT dispatch_id FROM rc_lease WHERE slot=?').bind(uncertainSlot).first();assert(row.dispatch_id);
+ let posts=0;
+ const reconciliation=async(url,opts)=>{if(url.includes('graphql'))return analytics();if(opts.method==='POST'){posts++;throw Error('must not resend');}return Response.json({workflow_runs:[{id:987,run_attempt:1,display_title:'RC2 '+uncertainSlot+' '+row.dispatch_id,head_sha:uncertainEnv.RC_PINNED_SHA,head_branch:'research/pulse-architecture-20261128',event:'workflow_dispatch',created_at:new Date(uncertainSlot).toISOString(),status:'queued'}]});};
+ assert.equal((await tick(uncertainEnv,uncertainSlot+600001,reconciliation)).action,'reconciled');assert.equal(posts,0);
+ assert.equal(await scheduledClaim(db,uncertainSlot,'123:1',uncertainSlot+600002),null);
+ const repaired=await scheduledClaim(db,uncertainSlot,'987:1',uncertainSlot+600002);assert(repaired);assert(await start(db,repaired,uncertainSlot+600002,'987:1',true));assert(await publish(db,repaired,fixture(uncertainSlot+600002),uncertainSlot+600002,'987:1'));
+ summary.safe_unsent_recovery=true;summary.ambiguous_reconcile_no_resend=true;
+ assert.equal(await githubOidcIdentity(await sign(claims),ts*1000,load,()=>{},null,'b'.repeat(40)),null);
+ assert(await githubOidcIdentity(await sign({...claims,sha:'b'.repeat(40),workflow_sha:'b'.repeat(40)}),ts*1000,load,()=>{},null,'b'.repeat(40)));
+ summary.pinned_oidc_sha=true;
  await writeFile('control-results.json',JSON.stringify(summary,null,2));console.log('RC_CONTROL',JSON.stringify(summary));
 }finally{await mf.dispose();}

@@ -161,17 +161,17 @@ def main():
     if (lease and not slot) or (slot and not re.fullmatch(r"[0-9]{13}", slot)) or (lease and not re.fullmatch(r"[0-9a-f-]{36}", lease)):
         raise RuntimeError("invalid staging lease")
     try:
-        if slot and not lease:
+        if slot:
             # Bounded wait for the dispatch response to be committed; fresh OIDC for each attempt.
-            for attempt in range(3):
+            for attempt in range(4):
                 try:
                     claim = post("/api/rc/acquire", {"slot": int(slot)})
                     break
                 except urllib.error.HTTPError as exc:
-                    if exc.code != 409 or attempt == 2:raise
-                    time.sleep(2)
+                    if exc.code != 409 or attempt == 3:raise
+                    time.sleep(5)
         else:
-            claim = {"slot": int(slot), "token": lease} if slot else post("/api/rc/acquire", {})
+            claim = post("/api/rc/acquire", {})
         if post("/api/rc/start", {"claim": claim}).get("ok") is not True:
             raise RuntimeError("start rejected")
     except urllib.error.HTTPError:

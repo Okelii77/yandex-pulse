@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS rc_lease(slot INTEGER PRIMARY KEY,token TEXT NOT NULL,expires INTEGER NOT NULL,state TEXT NOT NULL,started_at INTEGER,dispatch_at INTEGER,dispatch_ms INTEGER,finished_at INTEGER,owner TEXT,attempts INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS rc_lease(slot INTEGER PRIMARY KEY,token TEXT NOT NULL,expires INTEGER NOT NULL,state TEXT NOT NULL,started_at INTEGER,dispatch_at INTEGER,dispatch_ms INTEGER,finished_at INTEGER,owner TEXT,attempts INTEGER NOT NULL DEFAULT 1,dispatch_id TEXT);
 CREATE TABLE IF NOT EXISTS rc_latest(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL,slot INTEGER NOT NULL,token TEXT NOT NULL,generated_at TEXT NOT NULL,payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS rc_samples(check_id TEXT NOT NULL,checked_at TEXT NOT NULL,status TEXT NOT NULL,latency_ms INTEGER,PRIMARY KEY(check_id,checked_at));
 CREATE INDEX IF NOT EXISTS rc_samples_time ON rc_samples(checked_at);

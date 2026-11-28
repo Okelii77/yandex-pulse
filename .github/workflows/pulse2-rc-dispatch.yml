@@ -1,5 +1,6 @@
 # RC2 registration: synthetic-only. No schedules, no production credentials.
 name: Pulse 2.0 staging dispatch (synthetic only)
+run-name: RC2 ${{ inputs.slot }} ${{ inputs.lease }}
 on:
   workflow_dispatch:
     inputs:
@@ -8,12 +9,13 @@ on:
         required: false
         type: string
       lease:
-        description: 'Staging lease, optional for manual fallback'
+        description: 'Public dispatch correlation UUID, never a credential'
         required: false
         type: string
 permissions:
   contents: read
   id-token: write
+  attestations: read
 jobs:
   stage:
     if: github.repository == 'Okelii77/yandex-pulse' && github.ref == 'refs/heads/research/pulse-architecture-20261128'
@@ -28,6 +30,10 @@ jobs:
         env:
           ENABLED: ${{ vars.PULSE_RC2_SYNTHETIC_ENABLED }}
         run: test "$ENABLED" = 1
+      - name: Require pinned observation commit before loading project code
+        env:
+          EXPECTED_SHA: ${{ vars.PULSE_RC_PINNED_SHA }}
+        run: test -n "$EXPECTED_SHA" && test "$GITHUB_SHA" = "$EXPECTED_SHA"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -35,20 +41,19 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12.16'
-      - name: Verify prebuilt Core or build locked sources
+      - name: Verify GitHub signed provenance (no untrusted binary execution)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTESTED_SHA: ${{ vars.PULSE_RC_ATTESTED_COMMIT }}
         run: |
-          set +e
+          set -eu
+          test "$ATTESTED_SHA" = 18f15b2abf6830de930b637ee764d030a884bfc5
+          gh attestation verify research/results/pulse2/rc2-prebuilt/pulse-core-rc --repo Okelii77/yandex-pulse --signer-workflow Okelii77/yandex-pulse/.github/workflows/pulse2-rc2-provenance.yml --signer-digest "$ATTESTED_SHA" --source-digest "$ATTESTED_SHA" --deny-self-hosted-runners
+      - name: Verify prebuilt Core without rebuilding
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD:research/pulse2-rc)" = "$(git rev-parse 18f15b2abf6830de930b637ee764d030a884bfc5:research/pulse2-rc)"
           python research/pulse2-control/prebuilt-core.py
-          code=$?
-          set -e
-          if [ "$code" = 2 ]; then
-            started=$(date +%s%3N)
-            rustup toolchain install 1.100.1 --profile minimal
-            cargo +1.100.1 build --release --locked --manifest-path research/pulse2-rc/Cargo.toml --bin pulse-core-rc
-            echo "RC2_BUILD_MS $(( $(date +%s%3N) - started ))"
-          elif [ "$code" != 0 ]; then
-            exit "$code"
-          fi
       - name: Synthetic staging snapshot (no Yandex requests)
         run: python research/pulse2-control/run-synthetic.py
         env:
