@@ -1,0 +1,36 @@
+# RC2 registration: synthetic-only. No schedules, no production credentials.
+name: Pulse 2.0 staging dispatch (synthetic only)
+on:
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Reserved staging slot, optional for manual fallback'
+        required: false
+        type: string
+      lease:
+        description: 'Staging lease, optional for manual fallback'
+        required: false
+        type: string
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  stage:
+    if: github.repository == 'Okelii77/yandex-pulse' && github.ref == 'refs/heads/research/pulse-architecture-20261128' && vars.PULSE_RC2_SYNTHETIC_ENABLED == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    environment: pulse-rc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12.16'
+      - name: Synthetic staging snapshot (no Yandex requests)
+        run: python research/pulse2-control/run-synthetic.py
+        env:
+          PULSE_RC2_SYNTHETIC_ENABLED: ${{ vars.PULSE_RC2_SYNTHETIC_ENABLED }}
+          PULSE_RC_API_URL: ${{ vars.PULSE_RC_API_URL }}
+          PULSE_RC_SLOT: ${{ inputs.slot }}
+          PULSE_RC_LEASE: ${{ inputs.lease }}
