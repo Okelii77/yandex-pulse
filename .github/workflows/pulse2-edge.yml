@@ -1,0 +1,45 @@
+name: Pulse 2.0 local edge lab
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['research/pulse2-edge/**','.github/workflows/pulse2-edge.yml']
+permissions:
+  contents: read
+jobs:
+  edge:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: research/pulse2-edge
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: |
+          mkdir -p dist evidence
+          ./node_modules/.bin/tsc --target es2022 --module es2022 --strict --outDir dist worker.ts hybrid.ts wasm.d.ts
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+          rustc --crate-type=cdylib --target wasm32-unknown-unknown -C opt-level=s -C panic=abort kernel.rs -o dist/kernel.wasm
+          cargo install worker-build --version 0.9.0 --locked
+          cd rust-worker
+          worker-build --release
+      - run: |
+          wc -c worker.mjs dist/* rust-worker/build/worker/* > evidence/sizes.txt || true
+          node run.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pulse2-edge-evidence
+          retention-days: 1
+          if-no-files-found: warn
+          path: |
+            research/pulse2-edge/evidence/
+            research/pulse2-edge/package-lock.json
+            research/pulse2-edge/rust-worker/Cargo.lock

@@ -1,0 +1,9 @@
+{
+  "name": "pulse2-local-edge",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "miniflare": "4.20260730.0",
+    "typescript": "5.9.3"
+  }
+}
