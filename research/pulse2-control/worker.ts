@@ -1,6 +1,6 @@
 // Isolated RC control plane. No production DB or routes modified.
 type DB={prepare(sql:string):any;batch(statements:any[]):Promise<any[]>};
-type Env={DB:DB;RC_LOCAL_ONLY?:string;LOCAL_TOKEN?:string;RC_ENABLE_DISPATCH?:string;RC_ENABLE_INGEST?:string;RC_MAX_LAUNCHES?:string;RC_GITHUB_TOKEN?:string;RC_ORIGIN?:string;RC_TURNSTILE_SECRET?:string;RC_TURNSTILE_SITE_KEY?:string;RC_MODE?:string;RC_OBSERVE_START?:string;RC_OBSERVE_END?:string;RC_PAUSED?:string;RC_TURNSTILE_VERIFY_ONLY?:string;ASSETS?:{fetch(req:Request):Promise<Response>}};
+type Env={DB:DB;RC_LOCAL_ONLY?:string;LOCAL_TOKEN?:string;RC_ENABLE_DISPATCH?:string;RC_ENABLE_INGEST?:string;RC_MAX_LAUNCHES?:string;RC_GITHUB_TOKEN?:string;RC_ORIGIN?:string;RC_TURNSTILE_SECRET?:string;RC_TURNSTILE_SITE_KEY?:string;RC_MODE?:string;RC_OBSERVE_START?:string;RC_OBSERVE_END?:string;RC_PAUSED?:string;RC_TURNSTILE_VERIFY_ONLY?:string;RC_CF_ACCOUNT_ID?:string;RC_CF_ANALYTICS_TOKEN?:string;ASSETS?:{fetch(req:Request):Promise<Response>}};
 const SLOT=1800000,LEASE=600000,DAY=86400000;
 const CATALOG_IDS=new Set(["music-web","music-catalog","music-rest","music-ynison","music-history","music-queues","cloud-web","cloud-console","cloud-storage","cloud-iam","cloud-monitoring","mail-web","mail-imap","mail-smtp","mail-360","disk-web","disk-api","id-passport","id-oauth","wiki-web","wiki-api","maps-web","maps-geocoder","search-web","search-webmaster","ai-studio","ai-models","ai-speech","ai-vision","other-telemost","other-metrika","other-tracker","other-market","other-weather"]);
 const epoch=(now:number)=>Math.floor(now/SLOT)*SLOT;
@@ -128,7 +128,7 @@ export async function githubOidcIdentity(token: string, now=Date.now(), load:typ
 
 
 // Private, bounded diagnostic evidence; no raw claims, kid, JWT, URL or headers.
-const OIDC_DIAG_VERSION="rc2-stage5-ops-2";
+const OIDC_DIAG_VERSION="rc2-stage5-ops-3";
 async function auditOidc(db:DB,now:number,ray:string,steps:any[]){
  try{
   if(!await reserveBudget(db,now,0,0,80,4))return;
@@ -246,9 +246,43 @@ export async function history(db:DB,request:Request,now:number,headers:Record<st
  }
  return response(full,200,{...headers,ETag:tag});
 }
+// Account-wide headroom: read-only token, not a resource-management credential.
+// Delayed analytics is not a billing meter; local atomic limits still apply.
+export async function accountQuotaGuard(env:Env,now:number,send:typeof fetch=fetch){
+ if(env.RC_LOCAL_ONLY==="1")return "ok";
+ const window=observationWindow(env,now);
+ if(!window.active)return "outside_window";
+ const saved=await env.DB.prepare("SELECT state FROM rc_observation_guard WHERE window_start=?").bind(window.start).first();
+ if(saved?.state==="paused")return "quota_paused";
+ if(!env.RC_CF_ANALYTICS_TOKEN||!env.RC_CF_ACCOUNT_ID||!/^[a-f0-9]{32}$/i.test(env.RC_CF_ACCOUNT_ID))return "analytics_not_configured";
+ // Reserve before querying; fail closed if the local budget is already exhausted.
+ if(!await reserveBudget(env.DB,now,0,0,32,4))return "local_budget";
+ try{
+  const day=iso(Math.floor(now/DAY)*DAY).slice(0,10);
+  const query="query($a:String!,$s:Time!,$e:Time!,$d:Date){viewer{accounts(filter:{accountTag:$a}){workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests}} d1AnalyticsAdaptiveGroups(limit:100,filter:{date_geq:$d,date_leq:$d}){sum{rowsRead rowsWritten}}}}}";
+  const r=await send("https://api.cloudflare.com/client/v4/graphql",{method:"POST",redirect:"manual",signal:AbortSignal.timeout(8000),headers:{Authorization:"Bearer "+env.RC_CF_ANALYTICS_TOKEN,"Content-Type":"application/json","User-Agent":"YandexPulse-Scheduler/2.0"},body:JSON.stringify({query,variables:{a:env.RC_CF_ACCOUNT_ID,s:day+"T00:00:00Z",e:iso(now),d:day}})});
+  if(r.status!==200)return "analytics_unavailable";
+  const data:any=await r.json(),a=data?.data?.viewer?.accounts;
+  if(data.errors?.length||!Array.isArray(a)||a.length!==1)return "analytics_unavailable";
+  const wr=a[0].workersInvocationsAdaptive,d1=a[0].d1AnalyticsAdaptiveGroups;
+  if(!Array.isArray(wr)||!wr.length||!Array.isArray(d1)||!d1.length)return "analytics_unavailable";
+  const total=(rows:any[],key:string)=>rows.reduce((n,x)=>{const v=x?.sum?.[key];if(!Number.isFinite(v)||v<0)throw Error("invalid_metric");return n+v;},0);
+  const requests=total(wr,"requests"),reads=total(d1,"rowsRead"),writes=total(d1,"rowsWritten");
+  const state=requests>=70000||reads>=3500000||writes>=70000?"paused":"ok";
+  const q=await env.DB.prepare("INSERT INTO rc_observation_guard(window_start,state,at,requests,reads,writes) VALUES(?,?,?,?,?,?) ON CONFLICT(window_start) DO UPDATE SET state=excluded.state,at=excluded.at,requests=excluded.requests,reads=excluded.reads,writes=excluded.writes WHERE rc_observation_guard.state!='paused' RETURNING state").bind(window.start,state,now,requests,reads,writes).first();
+  return q?.state==="ok"?"ok":"quota_paused";
+ }catch{return "analytics_unavailable";}
+}
 export async function tick(env:Env,now:number,send:typeof fetch=fetch){
  if(env.RC_ENABLE_DISPATCH!=="1"||!env.RC_GITHUB_TOKEN||(env.RC_LOCAL_ONLY==="1"&&send===fetch))return {action:"disabled"};
- if(env.RC_LOCAL_ONLY!=="1"&&!observationWindow(env,now).active)return {action:"outside_window"};
+ if(env.RC_LOCAL_ONLY!=="1"){
+  if(!observationWindow(env,now).active)return {action:"outside_window"};
+  const slot=epoch(now),day=Math.floor(now/DAY)*DAY;
+  if(await env.DB.prepare("SELECT slot FROM rc_lease WHERE slot=?").bind(slot).first())return {action:"skip"};
+  const budget=await env.DB.prepare("SELECT launch FROM rc_daily_budget WHERE day=?").bind(day).first();
+  if((budget?.launch||0)>=Math.max(1,Math.min(48,Number(env.RC_MAX_LAUNCHES)||1)))return {action:"skip"};
+  const guard=await accountQuotaGuard(env,now,send);if(guard!=="ok")return {action:guard};
+ }
  const claim=await budgetedAcquire(env,now);if(!claim)return {action:"skip"};
  const began=Date.now();await env.DB.prepare("UPDATE rc_lease SET dispatch_at=? WHERE slot=? AND token=?").bind(now,claim.slot,claim.token).run();
  try{const r=await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches",{method:"POST",redirect:"manual",signal:AbortSignal.timeout(10000),headers:{Authorization:"Bearer "+env.RC_GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2026-03-10","User-Agent":"YandexPulse-Scheduler/2.0","Content-Type":"application/json"},body:JSON.stringify({ref:"research/pulse-architecture-20261128",inputs:{slot:String(claim.slot),lease:""}})});
@@ -308,7 +342,7 @@ export default {
  try{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors});
  if(path.startsWith("/api/")&&!await reserveBudget(env.DB,now,1,0,32,2))return response({error:"staging_budget_exhausted"},429,{...cors,"Retry-After":"3600"});
- if(req.method==="GET"&&path==="/api/health"){const row=await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();const lease=await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();return response({ok:true,version:"2.0.0-rc.2",build:OIDC_DIAG_VERSION,environment:"staging",mode:env.RC_MODE||"synthetic",trigger_ready:!!(observationWindow(env,now).active&&env.RC_ENABLE_DISPATCH==="1"&&env.RC_GITHUB_TOKEN&&env.RC_TURNSTILE_SECRET&&env.RC_TURNSTILE_SITE_KEY),last_observation:row?.generated_at||null,stale:!row||now-Date.parse(row.generated_at)>90*60000,last_slot:row?.slot||null,lease:lease?{slot:lease.slot,state:lease.state,expires:iso(lease.expires),dispatch_ms:lease.dispatch_ms,runner_wait_ms:lease.started_at&&lease.dispatch_at?Math.max(0,lease.started_at-lease.dispatch_at):null,started_at:lease.started_at?iso(lease.started_at):null,finished_at:lease.finished_at?iso(lease.finished_at):null}:null},200,cors);}
+ if(req.method==="GET"&&path==="/api/health"){const row=await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();const lease=await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();return response({ok:true,version:"2.0.0-rc.2",build:OIDC_DIAG_VERSION,environment:"staging",mode:env.RC_MODE||"synthetic",trigger_ready:!!(observationWindow(env,now).active&&env.RC_CF_ANALYTICS_TOKEN&&env.RC_CF_ACCOUNT_ID&&env.RC_ENABLE_DISPATCH==="1"&&env.RC_GITHUB_TOKEN&&env.RC_TURNSTILE_SECRET&&env.RC_TURNSTILE_SITE_KEY),last_observation:row?.generated_at||null,stale:!row||now-Date.parse(row.generated_at)>90*60000,last_slot:row?.slot||null,lease:lease?{slot:lease.slot,state:lease.state,expires:iso(lease.expires),dispatch_ms:lease.dispatch_ms,runner_wait_ms:lease.started_at&&lease.dispatch_at?Math.max(0,lease.started_at-lease.dispatch_at):null,started_at:lease.started_at?iso(lease.started_at):null,finished_at:lease.finished_at?iso(lease.finished_at):null}:null},200,cors);}
  if(req.method==="GET"&&path==="/api/status"){const row=await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();if(!row)return response({error:"waiting"},503,cors);const tag='"s-'+row.revision+'"';return req.headers.get("If-None-Match")===tag?response(null,304,{...cors,ETag:tag}):response({...JSON.parse(row.payload),environment:"staging",data_mode:JSON.parse(row.payload).data_mode||"synthetic"},200,{...cors,ETag:tag});}
  if(req.method==="GET"&&path==="/api/history")return await history(env.DB,req,now,cors);
  if(req.method==="POST"&&path==="/api/trigger"){const result=await manualTrigger(req,env,now);return new Response(result.body,{status:result.status,headers:{...Object.fromEntries(result.headers.entries()),...cors}});}
