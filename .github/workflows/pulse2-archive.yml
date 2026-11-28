@@ -1,0 +1,42 @@
+name: Archive verified Pulse research evidence
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-archive.yml']
+permissions:
+  contents: read
+jobs:
+  preserve:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/pulse-architecture-20261128
+      - uses: actions/download-artifact@v4
+        with:
+          name: architecture-lab-evidence
+          run-id: 46138272071
+          github-token: ${{ github.token }}
+          path: research/results/stage2/raw-ci-46138272071
+      - uses: actions/download-artifact@v4
+        with:
+          name: pulse2-system-evidence
+          run-id: 46139577701
+          github-token: ${{ github.token }}
+          path: research/results/pulse2/raw-system-46139577701
+      - name: Commit archived data only
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = research/pulse-architecture-20261128
+          python -c 'import json,pathlib; p=pathlib.Path("research/results/stage2/raw-ci-46138272071/stage2-results.jsonl"); rows=[json.loads(x) for x in p.read_text().splitlines()]; assert len(rows)==1000 and all("error" not in x for x in rows)'
+          git config user.name 'pulse-research-ci'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- research/results/stage2/raw-ci-46138272071 research/results/pulse2/raw-system-46139577701
+          git diff --cached --quiet && exit 0
+          git commit -m 'research: archive verified CI measurements before artifact expiration'
+          git push origin HEAD:refs/heads/research/pulse-architecture-20261128
