@@ -21,7 +21,7 @@ jobs:
           headers={"User-Agent":"YandexPulse-RC2-Smoke/2.0"}
           with opener.open(urllib.request.Request(base+"/api/health",headers=headers),timeout=20) as r:
               h=json.load(r)
-              assert h["build"]=="rc2-oidc-diagnostic-1" and h["environment"]=="staging" and h["mode"]=="synthetic"
+              assert h["build"]=="rc2-oidc-diagnostic-2" and h["environment"]=="staging" and h["mode"]=="synthetic"
               print("RC2 diagnostic build verified")
           try:
               opener.open(urllib.request.Request(base+"/api/rc/oidc-probe",method="POST",data=b"{}",headers=headers),timeout=30)
