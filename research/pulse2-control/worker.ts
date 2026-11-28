@@ -1,6 +1,6 @@
 // Isolated RC control plane. No production DB or routes modified.
 type DB={prepare(sql:string):any;batch(statements:any[]):Promise<any[]>};
-type Env={DB:DB;RC_LOCAL_ONLY?:string;LOCAL_TOKEN?:string;RC_ENABLE_DISPATCH?:string;RC_GITHUB_TOKEN?:string;RC_ORIGIN?:string;RC_TURNSTILE_SECRET?:string;RC_TURNSTILE_SITE_KEY?:string;RC_MODE?:string;ASSETS?:{fetch(req:Request):Promise<Response>}};
+type Env={DB:DB;RC_LOCAL_ONLY?:string;LOCAL_TOKEN?:string;RC_ENABLE_DISPATCH?:string;RC_ENABLE_INGEST?:string;RC_MAX_LAUNCHES?:string;RC_GITHUB_TOKEN?:string;RC_ORIGIN?:string;RC_TURNSTILE_SECRET?:string;RC_TURNSTILE_SITE_KEY?:string;RC_MODE?:string;ASSETS?:{fetch(req:Request):Promise<Response>}};
 const SLOT=1800000,LEASE=600000,DAY=86400000;
 const CATALOG_IDS=new Set(["music-web","music-catalog","music-rest","music-ynison","music-history","music-queues","cloud-web","cloud-console","cloud-storage","cloud-iam","cloud-monitoring","mail-web","mail-imap","mail-smtp","mail-360","disk-web","disk-api","id-passport","id-oauth","wiki-web","wiki-api","maps-web","maps-geocoder","search-web","search-webmaster","ai-studio","ai-models","ai-speech","ai-vision","other-telemost","other-metrika","other-tracker","other-market","other-weather"]);
 const epoch=(now:number)=>Math.floor(now/SLOT)*SLOT;
@@ -61,49 +61,72 @@ const b64url = (input: string) => {
   const decoded=atob(str+"=".repeat((4-str.length%4)%4));
   return Uint8Array.from(decoded,c=>c.charCodeAt(0));
 };
-async function githubOidcValid(token: string, audience="yandex-pulse-rc-ingest", workflow="pulse2-rc-dispatch.yml") {
+export async function githubOidcIdentity(token: string, now=Date.now(), load:typeof fetch=fetch) {
+  const audience="yandex-pulse-rc-ingest",workflow="pulse2-rc-dispatch.yml";
   try {
-    if(!token || token.length>12000)return false;
+    if(!token || token.length>12000)return null;
     const parts=token.split(".");
-    if(parts.length!==3)return false;
+    if(parts.length!==3)return null;
     const header=JSON.parse(new TextDecoder().decode(b64url(parts[0])));
     const claims=JSON.parse(new TextDecoder().decode(b64url(parts[1])));
-    const seconds=Math.floor(Date.now()/1000);
+    const seconds=Math.floor(now/1000);
     if(header.alg!=="RS256"||!header.kid||!Number.isInteger(claims.exp)||
        claims.exp<=seconds||claims.exp>seconds+600 ||
-       !Number.isInteger(claims.nbf)||!Number.isInteger(claims.iat)||claims.nbf>seconds || claims.iat>seconds+30 ||
+       !Number.isInteger(claims.nbf)||!Number.isInteger(claims.iat)||claims.nbf>seconds+30 || claims.iat>seconds+30 || claims.exp<=claims.iat || claims.exp-claims.iat>600 || claims.iat<seconds-600 ||
        claims.iss!=="https://token.actions.githubusercontent.com" ||
        claims.aud!==audience ||
        claims.repository!=="Okelii77/yandex-pulse" ||
        String(claims.repository_id)!=="1427282907" ||
        claims.ref!=="refs/heads/research/pulse-architecture-20261128" ||
        claims.environment!=="pulse-rc" || claims.event_name!=="workflow_dispatch" ||
+       claims.sub!=="repo:Okelii77/yandex-pulse:environment:pulse-rc" ||
+       !/^\d{1,20}$/.test(String(claims.run_id)) || !/^\d{1,10}$/.test(String(claims.run_attempt)) ||
+       typeof claims.jti!=="string" || !/^[A-Za-z0-9_-]{8,128}$/.test(claims.jti) ||
+       (claims.job_workflow_ref&&claims.job_workflow_ref!==claims.workflow_ref) ||
        claims.workflow_ref!==`Okelii77/yandex-pulse/.github/workflows/${workflow}@refs/heads/research/pulse-architecture-20261128`)
-      return false;
-    const response=await fetch("https://token.actions.githubusercontent.com/.well-known/jwks",{
-      cache:'no-store'
+      return null;
+    const response=await load("https://token.actions.githubusercontent.com/.well-known/jwks",{
+      cache:'no-store',redirect:"error",signal:AbortSignal.timeout(5000)
     });
-    if(!response.ok)return false;
+    if(!response.ok)return null;
     const jwks:any=await response.json();
     const jwk=(jwks.keys||[]).find((x: any)=>x.kid===header.kid&&x.kty==="RSA"&&x.use==="sig");
-    if(!jwk)return false;
+    if(!jwk)return null;
     const key=await crypto.subtle.importKey("jwk",jwk,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);
     const signed=new TextEncoder().encode(parts[0]+"."+parts[1]);
-    return crypto.subtle.verify({name:"RSASSA-PKCS1-v1_5"},key,b64url(parts[2]),signed);
-  }catch{return false;}
+    if(!await crypto.subtle.verify({name:"RSASSA-PKCS1-v1_5"},key,b64url(parts[2]),signed))return null;
+    return {owner:String(claims.run_id)+":"+String(claims.run_attempt),jti:claims.jti,expires:claims.exp*1000};
+  }catch{return null;}
 }
 
 
+// Conservative application reservations, not account-wide billing counters.
+export const BUDGET={api:4000,launch:52,reads:1500000,writes:12000};
+export async function reserveBudget(db:DB,now:number,api=0,launch=0,reads=0,writes=0,maxLaunch=BUDGET.launch){
+ const day=Math.floor(now/DAY)*DAY;
+ if(![api,launch,reads,writes].every(x=>Number.isSafeInteger(x)&&x>=0)||api>BUDGET.api||launch>maxLaunch||reads>BUDGET.reads||writes>BUDGET.writes)return false;
+ const row=await db.prepare("INSERT INTO rc_daily_budget(day,api,launch,reads,writes) VALUES(?,?,?,?,?) ON CONFLICT(day) DO UPDATE SET api=rc_daily_budget.api+excluded.api,launch=rc_daily_budget.launch+excluded.launch,reads=rc_daily_budget.reads+excluded.reads,writes=rc_daily_budget.writes+excluded.writes WHERE rc_daily_budget.api+excluded.api<=? AND rc_daily_budget.launch+excluded.launch<=? AND rc_daily_budget.reads+excluded.reads<=? AND rc_daily_budget.writes+excluded.writes<=? RETURNING day").bind(day,api,launch,reads,writes,BUDGET.api,maxLaunch,BUDGET.reads,BUDGET.writes).first();
+ return !!row;
+}
+export async function consumeOidc(db:DB,id:{owner:string;jti:string;expires:number}){
+ const r=await db.prepare("INSERT OR IGNORE INTO rc_oidc_used(jti,expires) VALUES(?,?) RETURNING jti").bind(id.jti,id.expires).first();return !!r;
+}
+async function budgetedAcquire(env:Env,now:number){
+ const claim=await acquire(env.DB,now);if(!claim)return null;
+ const max=Math.max(1,Math.min(BUDGET.launch,Number(env.RC_MAX_LAUNCHES)||1));
+ if(!await reserveBudget(env.DB,now,0,1,64,8,max))return null;
+ return claim;
+}
 export async function acquire(db:DB,now:number){
  const slot=epoch(now),token=crypto.randomUUID();
- const row=await db.prepare("INSERT INTO rc_lease(slot,token,expires,state) SELECT ?,?,?,'reserved' WHERE NOT EXISTS(SELECT 1 FROM rc_latest WHERE slot>=?) AND NOT EXISTS(SELECT 1 FROM rc_lease WHERE state IN ('reserved','running') AND expires>? AND slot!=?) ON CONFLICT(slot) DO UPDATE SET token=excluded.token,expires=excluded.expires,state='reserved',started_at=NULL,dispatch_ms=NULL,dispatch_at=NULL,finished_at=NULL WHERE rc_lease.state!='done' AND rc_lease.expires<=? RETURNING token").bind(slot,token,now+LEASE,slot,now,slot,now).first();
+ const row=await db.prepare("INSERT INTO rc_lease(slot,token,expires,state) SELECT ?,?,?,'reserved' WHERE NOT EXISTS(SELECT 1 FROM rc_latest WHERE slot>=?) AND NOT EXISTS(SELECT 1 FROM rc_lease WHERE state IN ('reserved','running') AND expires>? AND slot!=?) ON CONFLICT(slot) DO UPDATE SET token=excluded.token,expires=excluded.expires,state='reserved',attempts=rc_lease.attempts+1,owner=NULL,started_at=NULL,dispatch_ms=NULL,dispatch_at=NULL,finished_at=NULL WHERE rc_lease.state!='done' AND rc_lease.attempts<2 AND rc_lease.expires<=? RETURNING token").bind(slot,token,now+LEASE,slot,now,slot,now).first();
  return row?{slot,token}:null;
 }
-export async function start(db:DB,claim:{slot:number;token:string},now:number){
+export async function start(db:DB,claim:{slot:number;token:string},now:number,owner='fixture'){
  if(!Number.isSafeInteger(claim?.slot)||typeof claim?.token!=="string")return false;
- const r=await db.prepare("UPDATE rc_lease SET state='running',started_at=?,expires=? WHERE slot=? AND token=? AND state='reserved' AND expires>? RETURNING token").bind(now,now+LEASE,claim.slot,claim.token,now).first();return !!r;
+ const r=await db.prepare("UPDATE rc_lease SET state='running',owner=?,started_at=?,expires=? WHERE slot=? AND token=? AND state='reserved' AND expires>? RETURNING token").bind(owner,now,now+LEASE,claim.slot,claim.token,now).first();return !!r;
 }
-export async function publish(db:DB,claim:{slot:number;token:string},input:any,now:number){
+export async function publish(db:DB,claim:{slot:number;token:string},input:any,now:number,owner='fixture'){
  const data=safeStatus(input);
  if(data.checks.length!==34||new Set(data.checks.map((x:any)=>x.id)).size!==34||new Set(data.results.map((x:any)=>x.id)).size!==34||data.checks.some((x:any)=>!CATALOG_IDS.has(x.id))||data.results.some((x:any)=>!CATALOG_IDS.has(x.id)))throw Error("catalog_incomplete");
  if(["synthetic","real"].includes(input.data_mode))(data as any).data_mode=input.data_mode;
@@ -111,16 +134,16 @@ export async function publish(db:DB,claim:{slot:number;token:string},input:any,n
  if(!Number.isSafeInteger(claim.slot)||typeof claim.token!=="string"||claim.slot!==epoch(claim.slot)||Date.parse(data.generated_at)<claim.slot||Date.parse(data.generated_at)>now+60000)throw Error("invalid_observation");
  if(data.results.some((x:any)=>Date.parse(x.checked_at)>Date.parse(data.generated_at)+60000))throw Error("future_component");
  const measured=data.results.filter((x:any)=>["ok","down","degraded","no_data"].includes(x.status)&&Date.parse(x.checked_at)>=claim.slot).map((x:any)=>[x.id,x.checked_at,x.status,x.latency_ms]);
- const guard="EXISTS(SELECT 1 FROM rc_lease WHERE slot=? AND token=? AND state='running' AND expires>?) AND EXISTS(SELECT 1 FROM rc_latest WHERE id=1 AND slot=? AND token=?)";
- const args=[claim.slot,claim.token,now,claim.slot,claim.token];
+ const guard="EXISTS(SELECT 1 FROM rc_lease WHERE slot=? AND token=? AND state='running' AND owner=? AND expires>?) AND EXISTS(SELECT 1 FROM rc_latest WHERE id=1 AND slot=? AND token=?)";
+ const args=[claim.slot,claim.token,owner,now,claim.slot,claim.token];
  const b=await db.batch([
- db.prepare("INSERT INTO rc_latest(id,revision,slot,token,generated_at,payload) SELECT 1,1,?,?,?,? WHERE EXISTS(SELECT 1 FROM rc_lease WHERE slot=? AND token=? AND state='running' AND expires>?) ON CONFLICT(id) DO UPDATE SET revision=rc_latest.revision+1,slot=excluded.slot,token=excluded.token,generated_at=excluded.generated_at,payload=excluded.payload WHERE excluded.slot>rc_latest.slot AND excluded.generated_at>rc_latest.generated_at").bind(claim.slot,claim.token,data.generated_at,JSON.stringify(data),claim.slot,claim.token,now),
+ db.prepare("INSERT INTO rc_latest(id,revision,slot,token,generated_at,payload) SELECT 1,1,?,?,?,? WHERE EXISTS(SELECT 1 FROM rc_lease WHERE slot=? AND token=? AND state='running' AND owner=? AND expires>?) ON CONFLICT(id) DO UPDATE SET revision=rc_latest.revision+1,slot=excluded.slot,token=excluded.token,generated_at=excluded.generated_at,payload=excluded.payload WHERE excluded.slot>rc_latest.slot AND excluded.generated_at>rc_latest.generated_at").bind(claim.slot,claim.token,data.generated_at,JSON.stringify(data),claim.slot,claim.token,owner,now),
  db.prepare("INSERT OR IGNORE INTO rc_samples(check_id,checked_at,status,latency_ms) SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]'),json_extract(value,'$[3]') FROM json_each(?) WHERE "+guard).bind(JSON.stringify(measured),...args),
  db.prepare("UPDATE rc_lease SET state='done',finished_at=? WHERE slot=? AND token=? AND "+guard).bind(now,claim.slot,claim.token,...args),
  ]);
  return b[0].meta.changes===1;
 }
-export async function maintenance(db:DB,now:number){await db.batch([db.prepare("DELETE FROM rc_samples WHERE checked_at<?").bind(iso(now-90*DAY)),db.prepare("DELETE FROM rc_history WHERE epoch<?").bind(epoch(now)-4*SLOT),db.prepare("DELETE FROM rc_history_lock WHERE expires<=?").bind(now),db.prepare("DELETE FROM rc_lease WHERE slot<? AND expires<=?").bind(epoch(now)-7*DAY,now)]);}
+export async function maintenance(db:DB,now:number){await db.batch([db.prepare("DELETE FROM rc_oidc_used WHERE expires<=?").bind(now),db.prepare("DELETE FROM rc_daily_budget WHERE day<?").bind(Math.floor(now/DAY)*DAY-7*DAY),db.prepare("DELETE FROM rc_samples WHERE checked_at<?").bind(iso(now-90*DAY)),db.prepare("DELETE FROM rc_history WHERE epoch<?").bind(epoch(now)-4*SLOT),db.prepare("DELETE FROM rc_history_lock WHERE expires<=?").bind(now),db.prepare("DELETE FROM rc_lease WHERE slot<? AND expires<=?").bind(epoch(now)-7*DAY,now)]);}
 export async function history(db:DB,request:Request,now:number,headers:Record<string,string>={}){
  const latest=await db.prepare("SELECT revision FROM rc_latest WHERE id=1").first();if(!latest)return response({error:"waiting"},503,headers);
  const e=epoch(now),revision=latest.revision+"-"+e,tag='"h-'+revision+'"';
@@ -133,11 +156,14 @@ export async function history(db:DB,request:Request,now:number,headers:Record<st
    // Double-check after obtaining the lock, avoiding a repeated full scan.
    cached=await db.prepare("SELECT payload FROM rc_history WHERE revision=?").bind(revision).first();
    if(!cached){
+    // Reserve a conservative upper bound before the history scan. No unbounded rebuild loop.
+    const estimate=128+2*34*Math.min(1440,Number(latest.revision));
+    if(!await reserveBudget(db,now,0,0,estimate,12))return response({error:"staging_budget_exhausted"},429,{...headers,"Retry-After":"3600"});
     const q=await db.prepare("WITH ranked AS (SELECT *,ROW_NUMBER() OVER(PARTITION BY check_id,CASE WHEN checked_at>=? THEN 'r'||CAST(strftime('%s',checked_at)/1800 AS INT) WHEN checked_at>=? THEN 'w'||CAST(strftime('%s',checked_at)/7200 AS INT) ELSE 'm'||CAST(strftime('%s',checked_at)/21600 AS INT) END ORDER BY CASE status WHEN 'down' THEN 0 WHEN 'degraded' THEN 1 ELSE 2 END,checked_at DESC) rn FROM rc_samples WHERE checked_at>=? AND checked_at<=?) SELECT check_id,checked_at,status,latency_ms FROM ranked WHERE rn=1 ORDER BY check_id,checked_at").bind(iso(e-DAY),iso(e-7*DAY),iso(e-30*DAY),iso(now+60000)).all();
     const series:Record<string,any[]>={};for(const r of q.results)(series[r.check_id]??=[]).push([r.checked_at,r.status,r.latency_ms]);
     const payload=JSON.stringify({schema:1,retention_days:30,revision,as_of:iso(e),series});
     // Fencing checks both source revision and history lease, not merely lock ownership at start.
-    await db.prepare("INSERT OR IGNORE INTO rc_history(revision,epoch,source_rev,payload) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM rc_latest WHERE revision=?) AND EXISTS(SELECT 1 FROM rc_history_lock WHERE revision=? AND token=? AND expires>?)").bind(revision,e,latest.revision,payload,latest.revision,revision,token,now).run();
+    await db.prepare("INSERT OR IGNORE INTO rc_history(revision,epoch,source_rev,payload) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM rc_latest WHERE revision=?) AND EXISTS(SELECT 1 FROM rc_history_lock WHERE revision=? AND token=? AND expires>?)").bind(revision,e,latest.revision,payload,latest.revision,revision,token,Date.now()>now&&Date.now()-now<60000?Date.now():now).run();
     cached=await db.prepare("SELECT payload FROM rc_history WHERE revision=?").bind(revision).first();
    }
   }finally{await db.prepare("DELETE FROM rc_history_lock WHERE revision=? AND token=?").bind(revision,token).run();}
@@ -152,7 +178,7 @@ export async function history(db:DB,request:Request,now:number,headers:Record<st
 }
 export async function tick(env:Env,now:number,send:typeof fetch=fetch){
  if(env.RC_ENABLE_DISPATCH!=="1"||!env.RC_GITHUB_TOKEN||(env.RC_LOCAL_ONLY==="1"&&send===fetch))return {action:"disabled"};
- const claim=await acquire(env.DB,now);if(!claim)return {action:"skip"};
+ const claim=await budgetedAcquire(env,now);if(!claim)return {action:"skip"};
  const began=Date.now();await env.DB.prepare("UPDATE rc_lease SET dispatch_at=? WHERE slot=? AND token=?").bind(now,claim.slot,claim.token).run();
  try{const r=await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches",{method:"POST",redirect:"error",signal:AbortSignal.timeout(10000),headers:{Authorization:"Bearer "+env.RC_GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"YandexPulse-Scheduler/2.0","Content-Type":"application/json"},body:JSON.stringify({ref:"research/pulse-architecture-20261128",inputs:{slot:String(claim.slot),lease:claim.token}})});
  await env.DB.prepare("UPDATE rc_lease SET dispatch_ms=? WHERE slot=? AND token=?").bind(Date.now()-began,claim.slot,claim.token).run();
@@ -172,13 +198,20 @@ export async function manualTrigger(request:Request,env:Env,now:number,send:type
  const result=await tick(env,now,send);
  return result.action==="accepted"?response({ok:true,started_at:iso(now)},202):result.action==="skip"?response({error:"slot_busy_or_completed",retry_after_seconds:Math.ceil((epoch(now)+SLOT-now)/1000)},429):response({error:"github_unavailable",dispatch_uncertain:true},502);
 }
-async function authorized(req:Request,env:Env){const token=req.headers.get("Authorization")||"";return env.RC_LOCAL_ONLY==="1"?!!env.LOCAL_TOKEN&&token==="Bearer "+env.LOCAL_TOKEN:token.startsWith("Bearer ")&&await githubOidcValid(token.slice(7));}
+async function authorized(req:Request,env:Env){
+ const token=req.headers.get("Authorization")||"";
+ if(env.RC_LOCAL_ONLY==="1")return env.LOCAL_TOKEN&&token==="Bearer "+env.LOCAL_TOKEN?{owner:"fixture"}:null;
+ if(!token.startsWith("Bearer "))return null;
+ const id=await githubOidcIdentity(token.slice(7));
+ return id&&await consumeOidc(env.DB,id)?{owner:id.owner}:null;
+}
 export default {
- async scheduled(_event:any,env:Env,ctx:any){ctx.waitUntil(Promise.all([tick(env,Date.now()),maintenance(env.DB,Date.now())]));},
+ async scheduled(_event:any,env:Env,ctx:any){if(env.RC_ENABLE_DISPATCH!=="1")return;ctx.waitUntil(tick(env,Date.now()));},
  async fetch(req:Request,env:Env){
  const now=Date.now(),url=new URL(req.url),path=url.pathname;const cors:Record<string,string>=req.headers.get("Origin")===env.RC_ORIGIN&&env.RC_ORIGIN?{"Access-Control-Allow-Origin":env.RC_ORIGIN,"Access-Control-Allow-Headers":"Content-Type, If-None-Match","Access-Control-Allow-Methods":"GET, OPTIONS","Access-Control-Expose-Headers":"ETag, Retry-After","Vary":"Origin"}:{};
  try{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors});
+ if(path.startsWith("/api/")&&!await reserveBudget(env.DB,now,1,0,32,2))return response({error:"staging_budget_exhausted"},429,{...cors,"Retry-After":"3600"});
  if(req.method==="GET"&&path==="/api/health"){const row=await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();const lease=await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();return response({ok:true,version:"2.0.0-rc.2",environment:"staging",mode:env.RC_MODE||"synthetic",trigger_ready:!!(env.RC_ENABLE_DISPATCH==="1"&&env.RC_GITHUB_TOKEN&&env.RC_TURNSTILE_SECRET&&env.RC_TURNSTILE_SITE_KEY),last_observation:row?.generated_at||null,stale:!row||now-Date.parse(row.generated_at)>90*60000,last_slot:row?.slot||null,lease:lease?{slot:lease.slot,state:lease.state,expires:iso(lease.expires),dispatch_ms:lease.dispatch_ms,runner_wait_ms:lease.started_at&&lease.dispatch_at?Math.max(0,lease.started_at-lease.dispatch_at):null,started_at:lease.started_at?iso(lease.started_at):null,finished_at:lease.finished_at?iso(lease.finished_at):null}:null},200,cors);}
  if(req.method==="GET"&&path==="/api/status"){const row=await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();if(!row)return response({error:"waiting"},503,cors);const tag='"s-'+row.revision+'"';return req.headers.get("If-None-Match")===tag?response(null,304,{...cors,ETag:tag}):response({...JSON.parse(row.payload),environment:"staging",data_mode:JSON.parse(row.payload).data_mode||"synthetic"},200,{...cors,ETag:tag});}
  if(req.method==="GET"&&path==="/api/history")return await history(env.DB,req,now,cors);
@@ -186,12 +219,12 @@ export default {
  if(req.method==="GET"&&path==="/api/ynison/status")return response({schema:1,automatic:false,last_diagnostic:null,retry_after_at:null,available:false,reason:"shared_gate_not_authorized_for_staging"},200,cors);
  if(req.method==="POST"&&["/api/ynison/acquire","/api/ynison/finish"].includes(path))return response({error:"shared_gate_not_authorized_for_staging"},403,cors);
  if(req.method==="POST"&&(path==="/api/rc/acquire"||path==="/api/rc/start"||path==="/api/rc/ingest")){
- if(!await authorized(req,env))return response({error:"unauthorized"},401,cors);
- if(env.RC_LOCAL_ONLY!=="1"&&env.RC_ENABLE_DISPATCH!=="1")return response({error:"staging_disabled"},503,cors);
- if(path.endsWith("acquire")){const claim=await acquire(env.DB,now);return response(claim||{error:"busy"},claim?200:409,cors);}
+ const identity=await authorized(req,env);if(!identity)return response({error:"unauthorized"},401,cors);
+ if(env.RC_LOCAL_ONLY!=="1"&&env.RC_ENABLE_INGEST!=="1"&&env.RC_ENABLE_DISPATCH!=="1")return response({error:"staging_disabled"},503,cors);
+ if(path.endsWith("acquire")){const claim=await budgetedAcquire(env,now);return response(claim||{error:"busy_or_budget"},claim?200:409,cors);}
  if(Number(req.headers.get("Content-Length")||0)>100000)return response({error:"too_large"},413,cors);
  const raw=await req.text();if(new TextEncoder().encode(raw).length>100000)return response({error:"too_large"},413,cors);
- const data=JSON.parse(raw);if(path.endsWith("/start")){const ok=await start(env.DB,data.claim,now);return response({ok},ok?200:409,cors);}const mode=env.RC_MODE||"synthetic";if(env.RC_LOCAL_ONLY!=="1"&&data.payload?.data_mode!==mode)return response({error:"mode_mismatch"},422,cors);const ok=await publish(env.DB,data.claim,data.payload,now);return response({ok},ok?200:409,cors);}
+ const data=JSON.parse(raw);if(path.endsWith("/start")){const ok=await start(env.DB,data.claim,now,identity.owner);return response({ok},ok?200:409,cors);}const mode=env.RC_MODE||"synthetic";if(env.RC_LOCAL_ONLY!=="1"&&data.payload?.data_mode!==mode)return response({error:"mode_mismatch"},422,cors);if(!await reserveBudget(env.DB,now,0,0,128,100))return response({error:"staging_budget_exhausted"},429,cors);const ok=await publish(env.DB,data.claim,data.payload,now,identity.owner);return response({ok},ok?200:409,cors);}
  if(req.method==="GET"&&path==="/api-config.js")return new Response("window.PULSE_API_CONFIG="+JSON.stringify({apiUrl:url.origin,turnstileSiteKey:env.RC_TURNSTILE_SITE_KEY||"",staging:true})+";",{headers:{"Content-Type":"application/javascript","Cache-Control":"no-store"}});
  if(req.method==="GET"&&!path.startsWith("/api/")&&env.ASSETS)return env.ASSETS.fetch(req);
  return response({error:"not_found"},404,cors);

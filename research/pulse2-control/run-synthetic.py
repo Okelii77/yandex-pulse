@@ -61,13 +61,14 @@ def main():
     u = urlsplit(oidc)
     if u.scheme != "https" or not u.hostname or not u.hostname.endswith(".actions.githubusercontent.com") or u.username or u.password or u.fragment:
         raise RuntimeError("OIDC issuer URL not approved")
-    req = urllib.request.Request(oidc + ("&" if "?" in oidc else "?") + "audience=yandex-pulse-rc-ingest",
-                                 headers={"Authorization": "Bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]})
-    token = get_json(req)["value"]
+    def fresh_token():
+        req = urllib.request.Request(oidc + ("&" if "?" in oidc else "?") + "audience=yandex-pulse-rc-ingest",
+                                     headers={"Authorization": "Bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]})
+        return get_json(req)["value"]
     def post(path, data):
         assert path in ("/api/rc/acquire", "/api/rc/start", "/api/rc/ingest")
         return get_json(urllib.request.Request(base + path, data=json.dumps(data).encode(), method="POST",
-                        headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}))
+                        headers={"Authorization": "Bearer " + fresh_token(), "Content-Type": "application/json"}))
     slot = os.environ.get("PULSE_RC_SLOT", "")
     lease = os.environ.get("PULSE_RC_LEASE", "")
     if bool(slot) != bool(lease) or (slot and (not re.fullmatch(r"[0-9]{13}", slot) or not re.fullmatch(r"[0-9a-f-]{36}", lease))):
