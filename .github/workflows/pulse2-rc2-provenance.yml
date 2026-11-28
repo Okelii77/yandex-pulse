@@ -1,0 +1,35 @@
+name: RC2 independent build provenance
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-rc2-provenance.yml']
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+jobs:
+  provenance:
+    if: github.repository == 'Okelii77/yandex-pulse' && github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Independently rebuild and compare binary bytes
+        run: |
+          set -eu
+          rustup toolchain install 1.100.1 --profile minimal
+          cargo +1.100.1 build --release --locked --manifest-path research/pulse2-rc/Cargo.toml --bin pulse-core-rc
+          cmp research/pulse2-rc/target/release/pulse-core-rc research/results/pulse2/rc2-prebuilt/pulse-core-rc
+          sha256sum research/pulse2-rc/target/release/pulse-core-rc
+          git rev-parse HEAD:research/pulse2-rc
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: research/pulse2-rc/target/release/pulse-core-rc
+      - name: Verify GitHub signed provenance and exact workflow source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify research/results/pulse2/rc2-prebuilt/pulse-core-rc --repo Okelii77/yandex-pulse --signer-workflow Okelii77/yandex-pulse/.github/workflows/pulse2-rc2-provenance.yml --signer-digest "$GITHUB_SHA" --source-digest "$GITHUB_SHA" --deny-self-hosted-runners
+          echo "RC2_PROVENANCE_VERIFIED $GITHUB_SHA"
