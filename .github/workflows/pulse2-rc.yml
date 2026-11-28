@@ -27,6 +27,12 @@ jobs:
       - run: rustup default stable && cargo generate-lockfile && cargo build --locked --release
       - run: go build -trimpath -ldflags='-s -w' -o core-go core.go
       - run: python test_native.py && python test_music.py
+      - name: Native payload through D1 and browser
+        working-directory: research/pulse2-control
+        run: |
+          npm install --no-audit --no-fund
+          ./node_modules/.bin/tsc --target es2022 --module es2022 --outDir dist worker.ts
+          node full.mjs
       - name: Existing production regression suite (offline)
         working-directory: .
         run: |
@@ -43,3 +49,4 @@ jobs:
             research/pulse2-rc/native-results.json
             research/pulse2-rc/music-contract-results.json
             research/pulse2-rc/Cargo.lock
+            research/pulse2-control/full-results.json

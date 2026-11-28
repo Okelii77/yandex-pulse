@@ -34,7 +34,7 @@ def main():
  except urllib.error.HTTPError as e:
   if e.code!=503:raise
   previous={}
- native=json.loads(subprocess.check_output([str(ROOT/'research/pulse2-rc/target/release/pulse-core-rc'),'public',str(catalog_path)],timeout=150))
+ native=json.loads(subprocess.check_output([str(ROOT/'research/pulse2-rc/target/release/pulse-core-rc'),'public',str(catalog_path)],timeout=150,env={'PULSE_RC_APPROVED_PUBLIC':'1'}))
  rows=legacy_adapters(catalog,previous,approved=True)
  data=compose(catalog,native,rows)
  if call('/api/rc/ingest',{'claim':claim,'payload':data},True).get('ok') is not True:raise RuntimeError('ingest rejected')

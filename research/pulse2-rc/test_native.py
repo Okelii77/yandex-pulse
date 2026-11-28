@@ -1,4 +1,4 @@
-import pathlib,subprocess as sp,json,ssl,http.server as h,threading,tempfile,os,time,statistics
+import pathlib,subprocess as sp,json,ssl,http.server as h,threading,tempfile,os,time,statistics,random
 from compose import compose
 root=pathlib.Path(__file__).resolve().parent;catalog=json.loads((root/'../../monitor/services.json').read_text())
 class Server(h.ThreadingHTTPServer):request_queue_size=128;daemon_threads=True
@@ -27,12 +27,13 @@ with tempfile.TemporaryDirectory() as d:
   else:adapters.append(dict(id=c['id'],status='disabled' if c['id'] in ('music-ynison','maps-geocoder','ai-speech','ai-vision') else 'not_configured',checked_at='2026-11-28T00:00:00Z',latency_ms=None))
  f=p/'catalog.json';f.write_text(json.dumps(fixture));env=dict(os.environ,PULSE_FIXTURE_CA=str(p/'ca.pem'))
  data={};payload=None
- for name,cmd in [('rust','target/release/pulse-core-rc'),('go','core-go')]:
-  measurements=[]
-  for i in range(30):
-   t=time.perf_counter();r=json.loads(sp.check_output([str(root/cmd),'fixture',str(f)],env=env,timeout=20));measurements.append((time.perf_counter()-t)*1000)
+ for name,cmd,system_roots in [('rust','target/release/pulse-core-rc','0'),('go','core-go','0'),('rust-system-roots','target/release/pulse-core-rc','1')]:
+  measurements=[];metrics=[]
+  for i in range(15 if name=='rust-system-roots' else 30):
+   t=time.perf_counter();r=json.loads(sp.check_output([str(root/cmd),'fixture',str(f)],env=dict(env,PULSE_FIXTURE_SYSTEM_ROOTS=system_roots),timeout=20));metrics.append(r['metrics']);measurements.append((time.perf_counter()-t)*1000)
    assert {x['id']:x['status'] for x in r['results']}==expected
    payload=compose(catalog,r,{'results':adapters});assert len(payload['results'])==34
-  data[name]={'cycles':len(measurements),'public_checks':len(expected),'samples_ms':measurements,'p50_ms':statistics.median(measurements),'p95_ms':sorted(measurements)[28]}
+  data[name]={'cycles':len(measurements),'public_checks':len(expected),'samples_ms':measurements,'metrics':metrics,'p50_ms':statistics.median(measurements),'p95_ms':sorted(measurements)[__import__('math').ceil(len(measurements)*.95)-1]}
+  pathlib.Path('fixture-status-'+name+'.json').write_text(json.dumps(payload))
  for s in (a,b):s.shutdown();s.server_close()
  pathlib.Path('native-results.json').write_text(json.dumps(data,indent=2));pathlib.Path('fixture-status.json').write_text(json.dumps(payload));print('RC_NATIVE',json.dumps(data))
