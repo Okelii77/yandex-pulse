@@ -1,0 +1,5 @@
+5447940 bench-go
+   2867 bench.py
+   1761 bench.mjs
+5452568 total
+3502136 target/release/pulse2-bench

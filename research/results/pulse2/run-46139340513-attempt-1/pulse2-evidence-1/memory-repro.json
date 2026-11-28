@@ -1,0 +1,14 @@
+[
+  {
+    "parent_extra_mib": 0,
+    "child": "ru_maxrss_kib=12660\nVmHWM:\t    1680 kB\nVmRSS:\t    1680 kB\n"
+  },
+  {
+    "parent_extra_mib": 64,
+    "child": "ru_maxrss_kib=78196\nVmHWM:\t    1684 kB\nVmRSS:\t    1684 kB\n"
+  },
+  {
+    "parent_extra_mib": 128,
+    "child": "ru_maxrss_kib=143756\nVmHWM:\t    1676 kB\nVmRSS:\t    1676 kB\n"
+  }
+]
