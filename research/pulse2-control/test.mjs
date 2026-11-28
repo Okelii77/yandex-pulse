@@ -99,7 +99,7 @@ const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(co
  assert.equal(uncertain.action,'uncertain_wait_for_expiry');
  const row=await db.prepare('SELECT dispatch_id FROM rc_lease WHERE slot=?').bind(uncertainSlot).first();assert(row.dispatch_id);
  let posts=0;
- const reconciliation=async(url,opts)=>{if(url.includes('graphql'))return analytics();if(opts.method==='POST'){posts++;throw Error('must not resend');}return Response.json({workflow_runs:[{id:987,run_attempt:1,display_title:'RC2 '+uncertainSlot+' '+row.dispatch_id,head_sha:uncertainEnv.RC_PINNED_SHA,head_branch:'research/pulse-architecture-20261128',event:'workflow_dispatch',created_at:new Date(uncertainSlot).toISOString(),status:'queued'}]});};
+ const reconciliation=async(url,opts)=>{if(url.includes('graphql'))return analytics();if(opts.method==='POST'){posts++;throw Error('must not resend');}return Response.json({workflow_runs:[{id:987,run_attempt:1,display_title:'RC2 '+uncertainSlot+' '+row.dispatch_id,head_sha:uncertainEnv.RC_PINNED_SHA,head_branch:'research/pulse-architecture-20261128',event:'workflow_dispatch',path:'.github/workflows/pulse2-rc-dispatch.yml',created_at:new Date(uncertainSlot).toISOString(),status:'queued'}]});};
  assert.equal((await tick(uncertainEnv,uncertainSlot+600001,reconciliation)).action,'reconciled');assert.equal(posts,0);
  assert.equal(await scheduledClaim(db,uncertainSlot,'123:1',uncertainSlot+600002),null);
  const repaired=await scheduledClaim(db,uncertainSlot,'987:1',uncertainSlot+600002);assert(repaired);assert(await start(db,repaired,uncertainSlot+600002,'987:1',true));assert(await publish(db,repaired,fixture(uncertainSlot+600002),uncertainSlot+600002,'987:1'));
@@ -107,5 +107,9 @@ const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(co
  assert.equal(await githubOidcIdentity(await sign(claims),ts*1000,load,()=>{},null,'b'.repeat(40)),null);
  assert(await githubOidcIdentity(await sign({...claims,sha:'b'.repeat(40),workflow_sha:'b'.repeat(40)}),ts*1000,load,()=>{},null,'b'.repeat(40)));
  summary.pinned_oidc_sha=true;
+ const oneSlot={...windowEnv,RC_OBSERVE_START:'',RC_OBSERVE_END:'',RC_PREFLIGHT_SLOT:String(windowStart),RC_MAX_LAUNCHES:'1'};
+ assert(observationWindow(oneSlot,windowStart).active);assert(!observationWindow(oneSlot,windowStart+1800000).active);assert(!observationWindow({...oneSlot,RC_MAX_LAUNCHES:'48'},windowStart).valid);
+ assert(!observationWindow({...oneSlot,RC_OBSERVE_START:String(windowStart)},windowStart).valid);
+ summary.one_slot_preflight=true;
  await writeFile('control-results.json',JSON.stringify(summary,null,2));console.log('RC_CONTROL',JSON.stringify(summary));
 }finally{await mf.dispose();}

@@ -1,6 +1,6 @@
 // Isolated RC control plane. No production DB or routes modified.
 type DB={prepare(sql:string):any;batch(statements:any[]):Promise<any[]>};
-type Env={DB:DB;RC_LOCAL_ONLY?:string;LOCAL_TOKEN?:string;RC_ENABLE_DISPATCH?:string;RC_ENABLE_INGEST?:string;RC_MAX_LAUNCHES?:string;RC_GITHUB_TOKEN?:string;RC_ORIGIN?:string;RC_TURNSTILE_SECRET?:string;RC_TURNSTILE_SITE_KEY?:string;RC_MODE?:string;RC_OBSERVE_START?:string;RC_OBSERVE_END?:string;RC_PAUSED?:string;RC_TURNSTILE_VERIFY_ONLY?:string;RC_PINNED_SHA?:string;RC_CF_ACCOUNT_ID?:string;RC_CF_ANALYTICS_TOKEN?:string;ASSETS?:{fetch(req:Request):Promise<Response>}};
+type Env={DB:DB;RC_LOCAL_ONLY?:string;LOCAL_TOKEN?:string;RC_ENABLE_DISPATCH?:string;RC_ENABLE_INGEST?:string;RC_MAX_LAUNCHES?:string;RC_GITHUB_TOKEN?:string;RC_ORIGIN?:string;RC_TURNSTILE_SECRET?:string;RC_TURNSTILE_SITE_KEY?:string;RC_MODE?:string;RC_OBSERVE_START?:string;RC_OBSERVE_END?:string;RC_PAUSED?:string;RC_TURNSTILE_VERIFY_ONLY?:string;RC_PINNED_SHA?:string;RC_PREFLIGHT_SLOT?:string;RC_CF_ACCOUNT_ID?:string;RC_CF_ANALYTICS_TOKEN?:string;ASSETS?:{fetch(req:Request):Promise<Response>}};
 const SLOT=1800000,LEASE=600000,DAY=86400000;
 const CATALOG_IDS=new Set(["music-web","music-catalog","music-rest","music-ynison","music-history","music-queues","cloud-web","cloud-console","cloud-storage","cloud-iam","cloud-monitoring","mail-web","mail-imap","mail-smtp","mail-360","disk-web","disk-api","id-passport","id-oauth","wiki-web","wiki-api","maps-web","maps-geocoder","search-web","search-webmaster","ai-studio","ai-models","ai-speech","ai-vision","other-telemost","other-metrika","other-tracker","other-market","other-weather"]);
 const epoch=(now:number)=>Math.floor(now/SLOT)*SLOT;
@@ -129,7 +129,7 @@ export async function githubOidcIdentity(token: string, now=Date.now(), load:typ
 
 
 // Private, bounded diagnostic evidence; no raw claims, kid, JWT, URL or headers.
-const OIDC_DIAG_VERSION="rc2-stage6-preflight-1";
+const OIDC_DIAG_VERSION="rc2-stage6-preflight-2";
 async function auditOidc(db:DB,now:number,ray:string,steps:any[]){
  try{
   if(!await reserveBudget(db,now,0,0,80,4))return;
@@ -150,9 +150,10 @@ export async function consumeOidc(db:DB,id:{owner:string;jti:string;expires:numb
 }
 // Observation window is opt-in; no dispatch outside the exact 168-hour aligned range.
 export function observationWindow(env:Env,now:number){
- const start=Number(env.RC_OBSERVE_START),end=Number(env.RC_OBSERVE_END);
- const valid=Number.isSafeInteger(start)&&start>0&&start%SLOT===0&&end===start+7*DAY;
- return {valid,active:valid&&now>=start&&now<end&&env.RC_PAUSED!=="1"&&env.RC_MODE==="synthetic",start,end};
+ const preflight=env.RC_PREFLIGHT_SLOT!==undefined&&env.RC_PREFLIGHT_SLOT!=="";
+ const start=Number(preflight?env.RC_PREFLIGHT_SLOT:env.RC_OBSERVE_START),end=preflight?start+SLOT:Number(env.RC_OBSERVE_END);
+ const valid=Number.isSafeInteger(start)&&start>0&&start%SLOT===0&&(preflight?(!env.RC_OBSERVE_START&&!env.RC_OBSERVE_END&&env.RC_MAX_LAUNCHES==="1"):end===start+7*DAY);
+ return {valid,active:valid&&now>=start&&now<end&&env.RC_PAUSED!=="1"&&env.RC_MODE==="synthetic",start,end,preflight};
 }
 async function budgetedAcquire(env:Env,now:number,owner?:string){
  const day=Math.floor(now/DAY)*DAY,slot=epoch(now),token=crypto.randomUUID();
@@ -285,21 +286,23 @@ export async function recoverUnsent(db:DB,slot:number,now:number){
  const r=await db.prepare("UPDATE rc_lease SET token=?,expires=?,attempts=attempts+1 WHERE slot=? AND state='reserved' AND owner IS NULL AND dispatch_at IS NULL AND expires<=? AND attempts<2 AND NOT EXISTS(SELECT 1 FROM rc_dispatch_evidence WHERE slot=?) RETURNING token").bind(token,Math.min(now+LEASE,slot+SLOT),slot,now,slot).first();
  return r?{slot,token}:null;
 }
-export async function reconcileDispatch(env:Env,slot:number,now:number,send:typeof fetch=fetch){
+export async function reconcileDispatch(env:Env,slot:number,now:number,send:typeof fetch=fetch,observedRun?:string){
  // Never issue a second POST for an ambiguous send. Reconcile the original run by a unique
  // public correlation label (not a bearer credential), pinned commit, branch, workflow and event.
  const lease=await env.DB.prepare("SELECT state,owner,expires,dispatch_at,dispatch_id FROM rc_lease WHERE slot=?").bind(slot).first();
  if(!lease||lease.state!=="reserved"||lease.owner||!lease.dispatch_at||typeof lease.dispatch_id!=="string"||!/^[a-f0-9-]{36}$/.test(lease.dispatch_id))return {action:"skip"};
  if(!validPin(env))return {action:"pin_missing"};
  const evidence=await env.DB.prepare("SELECT run_id FROM rc_dispatch_evidence WHERE slot=?").bind(slot).first();
- const known=typeof evidence?.run_id==="string"&&/^\d{1,20}$/.test(evidence.run_id)?evidence.run_id:null;
+ const recorded=typeof evidence?.run_id==="string"&&/^\d{1,20}$/.test(evidence.run_id)?evidence.run_id:null;
+ if(observedRun&&(!/^\d{1,20}$/.test(observedRun)||(recorded&&recorded!==observedRun)))return {action:"skip"};
+ const known=recorded||observedRun||null;
  try{
   const path=known?"https://api.github.com/repos/Okelii77/yandex-pulse/actions/runs/"+known:DISPATCH_URL+"/runs?"+new URLSearchParams({branch:DISPATCH_BRANCH,event:"workflow_dispatch",head_sha:env.RC_PINNED_SHA!,per_page:"20",created:">="+iso(lease.dispatch_at-60000)});
   const res=await send(path,{redirect:"manual",signal:AbortSignal.timeout(5000),headers:githubHeaders(env)});
   if(res.status!==200)return {action:"reconcile_unavailable"};
   const json:any=await res.json(),all=known?[json]:json.workflow_runs;
   if(!Array.isArray(all)||all.length>20)return {action:"reconcile_unavailable"};
-  const matches=all.filter((x:any)=>x.display_title==="RC2 "+slot+" "+lease.dispatch_id&&x.head_sha===env.RC_PINNED_SHA&&x.head_branch===DISPATCH_BRANCH&&x.event==="workflow_dispatch"&&x.run_attempt===1&&Number.isSafeInteger(x.id)&&x.id>0&&Date.parse(x.created_at)>=lease.dispatch_at-60000&&Date.parse(x.created_at)<slot+SLOT&&(!known||String(x.id)===known));
+  const matches=all.filter((x:any)=>x.display_title==="RC2 "+slot+" "+lease.dispatch_id&&x.head_sha===env.RC_PINNED_SHA&&x.head_branch===DISPATCH_BRANCH&&x.event==="workflow_dispatch"&&x.path===".github/workflows/pulse2-rc-dispatch.yml"&&x.run_attempt===1&&Number.isSafeInteger(x.id)&&x.id>0&&Date.parse(x.created_at)>=lease.dispatch_at-60000&&Date.parse(x.created_at)<slot+SLOT&&(!known||String(x.id)===known));
   if(matches.length!==1)return {action:"uncertain_no_resend"};
   const run=matches[0],id=String(run.id);
   if(!["queued","requested","waiting","pending","in_progress"].includes(run.status))return {action:"run_terminal_no_resend"};
@@ -346,7 +349,7 @@ export async function tick(env:Env,now:number,send:typeof fetch=fetch){
 }
 export async function manualTrigger(request:Request,env:Env,now:number,send:typeof fetch=fetch){
  if(!env.RC_ORIGIN||request.headers.get("Origin")!==env.RC_ORIGIN)return response({error:"forbidden_origin"},403);
- const verifyOnly=env.RC_TURNSTILE_VERIFY_ONLY==="1"&&env.RC_ENABLE_DISPATCH!=="1";
+ const verifyOnly=env.RC_TURNSTILE_VERIFY_ONLY==="1"&&env.RC_ENABLE_DISPATCH!=="1"&&env.RC_ENABLE_INGEST!=="1"&&env.RC_PAUSED==="1";
  if((!verifyOnly&&(env.RC_ENABLE_DISPATCH!=="1"||!env.RC_GITHUB_TOKEN||(env.RC_LOCAL_ONLY!=="1"&&!observationWindow(env,now).active)))||!env.RC_TURNSTILE_SECRET||!env.RC_TURNSTILE_SITE_KEY)return response({error:"trigger_not_configured"},503);
  let body:any;try{const raw=await request.text();if(raw.length>4096)return response({error:"too_large"},413);body=JSON.parse(raw);}catch{return response({error:"invalid_json"},400);}
  if(typeof body?.turnstileToken!=="string"||!body.turnstileToken||body.turnstileToken.length>2048)return response({error:"turnstile_failed"},403);
@@ -393,6 +396,13 @@ export default {
  try{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors});
  if(path.startsWith("/api/")&&!await reserveBudget(env.DB,now,1,0,32,2))return response({error:"staging_budget_exhausted"},429,{...cors,"Retry-After":"3600"});
+ if(req.method==="GET"&&path==="/rc2-turnstile-check"){
+  if(env.RC_TURNSTILE_VERIFY_ONLY!=="1"||env.RC_ENABLE_DISPATCH==="1"||env.RC_ENABLE_INGEST==="1"||env.RC_PAUSED!=="1")return response({error:"not_found"},404);
+  const sitekey=env.RC_TURNSTILE_SITE_KEY;
+  if(!sitekey||!/^[A-Za-z0-9_-]{10,100}$/.test(sitekey))return response({error:"trigger_not_configured"},503);
+  const html='<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RC2 — Turnstile preflight</title><body style="font-family:system-ui;max-width:600px;margin:40px auto;padding:16px"><h1>Yandex Pulse RC2 — проверка Turnstile</h1><p>Только проверка безопасности. Мониторинг, GitHub dispatch и публикации отключены. После подтверждения сообщите в чат.</p><div id="widget"></div><p id="result" role="status">Ожидание подтверждения…</p><script>window.ready=function(){turnstile.render("#widget",{sitekey:'+JSON.stringify(sitekey)+',action:"pulse-rc-trigger",callback:async function(token){try{const r=await fetch("/api/trigger",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({turnstileToken:token})});document.getElementById("result").textContent=r.status===503?"Проверка отправлена. Запуск мониторинга отключён.":"Проверка отклонена. Сообщите в чат.";}catch{document.getElementById("result").textContent="Ошибка сети.";}}});};</script><script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=ready&render=explicit" async defer></script></body></html>';
+  return new Response(html,{headers:{"Content-Type":"text/html;charset=utf-8","Cache-Control":"no-store","X-Robots-Tag":"noindex, nofollow","Referrer-Policy":"no-referrer","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; script-src 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"}});
+ }
  if(req.method==="GET"&&path==="/api/health"){const row=await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();const lease=await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();return response({ok:true,version:"2.0.0-rc.2",build:OIDC_DIAG_VERSION,pinned_sha:env.RC_PINNED_SHA||null,environment:"staging",mode:env.RC_MODE||"synthetic",trigger_ready:!!(observationWindow(env,now).active&&validPin(env)&&env.RC_CF_ANALYTICS_TOKEN&&env.RC_CF_ACCOUNT_ID&&env.RC_ENABLE_DISPATCH==="1"&&env.RC_GITHUB_TOKEN&&env.RC_TURNSTILE_SECRET&&env.RC_TURNSTILE_SITE_KEY),last_observation:row?.generated_at||null,stale:!row||now-Date.parse(row.generated_at)>90*60000,last_slot:row?.slot||null,lease:lease?{slot:lease.slot,state:lease.state,expires:iso(lease.expires),dispatch_ms:lease.dispatch_ms,runner_wait_ms:lease.started_at&&lease.dispatch_at?Math.max(0,lease.started_at-lease.dispatch_at):null,started_at:lease.started_at?iso(lease.started_at):null,finished_at:lease.finished_at?iso(lease.finished_at):null}:null},200,cors);}
  if(req.method==="GET"&&path==="/api/status"){const row=await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();if(!row)return response({error:"waiting"},503,cors);const tag='"s-'+row.revision+'"';return req.headers.get("If-None-Match")===tag?response(null,304,{...cors,ETag:tag}):response({...JSON.parse(row.payload),environment:"staging",data_mode:JSON.parse(row.payload).data_mode||"synthetic"},200,{...cors,ETag:tag});}
  if(req.method==="GET"&&path==="/api/history")return await history(env.DB,req,now,cors);
@@ -406,7 +416,13 @@ export default {
  if(path.endsWith("acquire")){
   if(env.RC_LOCAL_ONLY!=="1"&&observationWindow(env,now).active){
    const data=await req.json().catch(()=>null) as any;
-   const claim=await scheduledClaim(env.DB,data?.slot,identity.owner,now);
+   let claim=await scheduledClaim(env.DB,data?.slot,identity.owner,now);
+   if(!claim&&data?.slot===epoch(now)&&/^\d{1,20}:1$/.test(identity.owner)&&await accountQuotaGuard(env,now)==="ok"){
+    // A real signed runner can recover a missing dispatch response immediately, by querying
+    // its exact run ID and comparing the durable correlation label, commit and workflow.
+    await reconcileDispatch(env,data.slot,now,fetch,identity.owner.split(":")[0]);
+    claim=await scheduledClaim(env.DB,data.slot,identity.owner,now);
+   }
    return response(claim||{error:"scheduled_lease_unavailable"},claim?200:409,cors);
   }
   const claim=await budgetedAcquire(env,now,identity.owner);return response(claim||{error:"busy_or_budget"},claim?200:409,cors);
