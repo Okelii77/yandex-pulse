@@ -1,0 +1,68 @@
+name: Pulse 2.0 reproducibility lab
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['research/pulse2-lab/**','.github/workflows/pulse2-lab.yml']
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [1, 2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: research/pulse2-lab
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.2'
+          cache: false
+      - run: python -m pip install aiohttp==3.13.3
+      - run: rustup default stable && bash build.sh
+      - run: python run.py --runner replica-${{ matrix.replica }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pulse2-evidence-${{ matrix.replica }}
+          retention-days: 1
+          if-no-files-found: warn
+          path: research/pulse2-lab/evidence/
+  preserve:
+    if: always() && github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    needs: benchmark
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/pulse-architecture-20261128
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pulse2-evidence-*
+          path: research/results/pulse2/run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+      - name: Preserve raw evidence on research branch only
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = research/pulse-architecture-20261128
+          git config user.name 'pulse-research-ci'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- research/results/pulse2/run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          git diff --cached --quiet && exit 0
+          git commit -m 'research: preserve raw Pulse 2.0 benchmark evidence'
+          git push origin HEAD:refs/heads/research/pulse-architecture-20261128
