@@ -2,7 +2,7 @@ name: RC2 dependency audit (offline service fixtures)
 on:
   push:
     branches: ['research/pulse-architecture-20261128']
-    paths: ['.github/workflows/pulse2-rc2-security.yml']
+    paths: ['.github/workflows/pulse2-rc2-security.yml','research/pulse2-rc/Cargo.toml','research/pulse2-control/requirements.in','research/pulse2-control/package.json']
 permissions:
   contents: read
   actions: read
