@@ -1,0 +1,43 @@
+{
+  "run": 46161147028,
+  "job": 141028519206,
+  "cloud_ray": "a61a7af0da13d6d3-IAD",
+  "diagnostic_builds": [
+    "rc2-oidc-diagnostic-1",
+    "rc2-oidc-diagnostic-2"
+  ],
+  "probes": [
+    {
+      "mode": "original",
+      "failure": "fetch",
+      "kind": "TypeError"
+    },
+    {
+      "mode": "explicit_headers",
+      "failure": "fetch",
+      "kind": "TypeError"
+    },
+    {
+      "mode": "minimal",
+      "http": 200,
+      "keys": 4,
+      "import_ok": 4,
+      "verify_false": 4
+    },
+    {
+      "mode": "redirect_error",
+      "failure": "fetch",
+      "kind": "TypeError",
+      "message_category": "redirect"
+    },
+    {
+      "mode": "signal_only",
+      "http": 200,
+      "keys": 4,
+      "import_ok": 4,
+      "verify_false": 4
+    }
+  ],
+  "fix": "redirect manual; require exactly HTTP 200; never follow redirects; preserve RSA verification, claim constraints, replay and owner fencing.",
+  "limitations": "Cloud runtime behavior observed directly; original request exception not logged, causal isolation via same fetch configuration; real JWT end-to-end still required."
+}

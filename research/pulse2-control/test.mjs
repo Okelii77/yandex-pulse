@@ -28,15 +28,17 @@ const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(co
  const ts=Math.floor(Date.now()/1000);const claims={iss:'https://token.actions.githubusercontent.com',aud:'yandex-pulse-rc-ingest',repository:'Okelii77/yandex-pulse',repository_id:'1427282907',repository_owner_id:'108305520',ref:'refs/heads/research/pulse-architecture-20261128',environment:'pulse-rc',event_name:'workflow_dispatch',workflow_ref:'Okelii77/yandex-pulse/.github/workflows/pulse2-rc-dispatch.yml@refs/heads/research/pulse-architecture-20261128',sub:'repo:Okelii77@108305520/yandex-pulse@1427282907:environment:pulse-rc',run_id:'123',run_attempt:'1',jti:'fixture-jti-123',iat:ts,nbf:ts,exp:ts+300};
  const enc=o=>Buffer.from(JSON.stringify(o)).toString('base64url');
  const sign=async c=>{const text=enc({alg:'RS256',kid:'fixture-key'})+'.'+enc(c);return text+'.'+Buffer.from(await crypto.subtle.sign('RSASSA-PKCS1-v1_5',keys.privateKey,new TextEncoder().encode(text))).toString('base64url');};
- const load=async()=>Response.json({keys:[jwk]});const id=await githubOidcIdentity(await sign(claims),ts*1000,load);assert(id&&id.owner==='123:1');assert(await consumeOidc(db,id));assert.equal(await consumeOidc(db,id),false);
+ const load=async(url,init)=>{assert.equal(url,'https://token.actions.githubusercontent.com/.well-known/jwks');assert.equal(init.redirect,'manual');assert(init.signal instanceof AbortSignal);return Response.json({keys:[jwk]});};const id=await githubOidcIdentity(await sign(claims),ts*1000,load);assert(id&&id.owner==='123:1');assert(await consumeOidc(db,id));assert.equal(await consumeOidc(db,id),false);
  for(const patch of [{iss:'wrong'},{aud:'wrong'},{repository_id:'1'},{repository:'wrong/repo'},{ref:'refs/heads/main'},{environment:'production'},{event_name:'push'},{workflow_ref:'wrong'},{sub:'wrong'},{sub:'repo:Okelii77/yandex-pulse:environment:pulse-rc'},{repository_owner_id:'1'},{sub:'repo:Okelii77@1/yandex-pulse@1427282907:environment:pulse-rc'},{exp:ts-1},{nbf:ts+999},{jti:''}])assert.equal(await githubOidcIdentity(await sign({...claims,...patch}),ts*1000,load),null);
  const traceCases=[];
  for(const [name,loader,expected] of [
   ['fetch',async()=>{throw new TypeError('fixture secret');},'jwks_fetch_exception'],
   ['http',async()=>new Response('',{status:503}),'jwks_http_rejected'],
+  ['redirect',async()=>new Response('',{status:302,headers:{Location:'https://untrusted.invalid/keys'}}),'jwks_http_rejected'],
+  ['non200',async()=>new Response('',{status:201}),'jwks_http_rejected'],
   ['json',async()=>new Response('invalid json'),'jwks_json_exception'],
   ['kid',async()=>Response.json({keys:[]}), 'jwks_key_missing'],
-  ['import',async()=>Response.json({keys:[{...jwk,key_ops:['sign'],alg:'RS512'}]}),'rsa_import_exception'],
+  ['import',async()=>Response.json({keys:[{...jwk,n:null,e:null}]}),'rsa_import_exception'],
  ]){
   const trace=[];assert.equal(await githubOidcIdentity(await sign(claims),ts*1000,loader,(code,status)=>trace.push({code,status})),null);assert.equal(trace.at(-1).code,expected,name);traceCases.push(name);
  }
