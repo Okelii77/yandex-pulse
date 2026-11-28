@@ -1,11 +1,11 @@
-import {Miniflare} from 'miniflare';import {readFile,writeFile} from 'node:fs/promises';import assert from 'node:assert/strict';import {performance} from 'node:perf_hooks';import {acquire,start,publish,history,tick,maintenance,manualTrigger,reserveBudget,consumeOidc,githubOidcIdentity} from './dist/worker.js';
+import {Miniflare} from 'miniflare';import {readFile,writeFile} from 'node:fs/promises';import assert from 'node:assert/strict';import {performance} from 'node:perf_hooks';import {acquire,start,publish,history,tick,maintenance,manualTrigger,reserveBudget,consumeOidc,githubOidcIdentity,observationWindow} from './dist/worker.js';
 const mf=new Miniflare({modules:true,scriptPath:process.cwd()+'/dist/worker.js',compatibilityDate:'2026-07-01',d1Databases:{DB:'rc-control-local'},bindings:{RC_LOCAL_ONLY:'1',LOCAL_TOKEN:'fixture-only'},cf:false});const now=Math.floor(Date.now()/1800000)*1800000+1000;
 const catalog=JSON.parse(await readFile('../../monitor/services.json','utf8'));const fixture=t=>({...catalog,generated_at:new Date(t).toISOString(),results:catalog.checks.map(c=>({id:c.id,status:c.kind==='music_ynison'||['maps-geocoder','ai-speech','ai-vision'].includes(c.id)?'disabled':'ok',checked_at:new Date(t).toISOString(),latency_ms:12}))});
 const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(const sql of (await readFile('schema.sql','utf8')).trim().split(/;\s*/).filter(Boolean))await db.prepare(sql).run();
  const t=now-31*86400000;
  const first=await Promise.all(Array.from({length:32},()=>acquire(db,t)));assert.equal(first.filter(Boolean).length,1);const claim=first.find(Boolean);
  assert.equal(await publish(db,claim,fixture(t),t),false);assert.equal(await start(db,{...claim,token:'wrong'},t),false);const starts=await Promise.all(Array.from({length:16},()=>start(db,claim,t)));assert.equal(starts.filter(Boolean).length,1);assert.equal(await publish(db,{...claim,token:'wrong'},fixture(t),t),false);assert(await publish(db,claim,fixture(t),t));assert.equal(await publish(db,claim,fixture(t),t),false);
- let dispatches=0;const mockEnv={DB:db,RC_ENABLE_DISPATCH:'1',RC_GITHUB_TOKEN:'fixture-only'};const fake=async(url,opts)=>{assert.equal(JSON.parse(opts.body).ref,'research/pulse-architecture-20261128');dispatches++;return new Response(null,{status:503})};
+ let dispatches=0;const mockEnv={DB:db,RC_LOCAL_ONLY:'1',RC_ENABLE_DISPATCH:'1',RC_GITHUB_TOKEN:'fixture-only'};const fake=async(url,opts)=>{assert.equal(JSON.parse(opts.body).ref,'research/pulse-architecture-20261128');dispatches++;return new Response(null,{status:503})};
  const next=t+1800000;assert.equal((await tick(mockEnv,next,fake)).action,'uncertain_wait_for_expiry');assert.equal((await tick(mockEnv,next+1,fake)).action,'skip');const retry=await acquire(db,next+600001);assert(retry);assert.equal(await start(db,claim,next+600001),false);assert(await start(db,retry,next+600001));assert(await publish(db,retry,fixture(next+600001),next+600001));
  const samples=[];const slots=48*31;
  // 31 virtual days; test all 34 catalog rows, no actual probes.
@@ -17,7 +17,7 @@ const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(co
  const latest=await db.prepare('SELECT generated_at,revision FROM rc_latest').first();assert.equal(latest.generated_at,fixture(v).generated_at);
  const r=await mf.dispatchFetch('http://localhost/api/status');assert.equal(r.status,200);const s=await r.json();assert.equal(s.results.length,34);assert.equal((await mf.dispatchFetch('http://localhost/api/status',{headers:{'If-None-Match':r.headers.get('ETag')}})).status,304);assert.equal((await mf.dispatchFetch('http://localhost/api/rc/acquire',{method:'POST'})).status,401);
  const stats=await db.prepare('SELECT count(*) n FROM rc_samples').first();assert.equal(stats.n,(slots+1)*30);const counts=(await db.prepare('SELECT check_id,count(*) n FROM rc_samples GROUP BY check_id').all()).results;assert.equal(counts.length,30);assert(counts.every(x=>x.n===slots+1));for(const id of ['music-ynison','maps-geocoder','ai-speech','ai-vision'])assert(!counts.some(x=>x.check_id===id));samples.sort((a,b)=>a-b);Object.assign(summary,{virtual_slots:slots+1,publications:latest.revision,sample_rows:stats.n,lease_contenders:32,start_contenders:16,history_contenders:12,dispatches,publish_p50_ms:samples[Math.floor(samples.length/2)],publish_p95_ms:samples[Math.ceil(samples.length*.95)-1],history_revision:full.revision,passed:true});
- const manualEnv={DB:db,RC_ENABLE_DISPATCH:'1',RC_GITHUB_TOKEN:'fixture-only',RC_ORIGIN:'https://staging.example',RC_TURNSTILE_SECRET:'fixture-secret',RC_TURNSTILE_SITE_KEY:'fixture-public'};
+ const manualEnv={DB:db,RC_LOCAL_ONLY:'1',RC_ENABLE_DISPATCH:'1',RC_GITHUB_TOKEN:'fixture-only',RC_ORIGIN:'https://staging.example',RC_TURNSTILE_SECRET:'fixture-secret',RC_TURNSTILE_SITE_KEY:'fixture-public'};
  let manualDispatches=0;const fakeManual=async(url,opts)=>{if(url.includes('siteverify'))return Response.json({success:opts.body.get('response')==='good',hostname:'staging.example'});manualDispatches++;return new Response(null,{status:204});};
  const request=(token,origin='https://staging.example')=>new Request('https://staging.example/api/trigger',{method:'POST',headers:{Origin:origin},body:JSON.stringify({turnstileToken:token})});
  const mt=v+3600000;assert.equal((await manualTrigger(request('good','https://wrong.example'),manualEnv,mt,fakeManual)).status,403);assert.equal((await manualTrigger(request('bad'),manualEnv,mt,fakeManual)).status,403);
@@ -45,6 +45,24 @@ const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(co
  const invalidSignature=(await sign(claims)).split('.');invalidSignature[2]='A'.repeat(invalidSignature[2].length);
  const badTrace=[];assert.equal(await githubOidcIdentity(invalidSignature.join('.'),ts*1000,load,c=>badTrace.push(c)),null);assert.equal(badTrace.at(-1),'rsa_signature_invalid');
  summary.oidc_stage_cases=traceCases.length+1;
+ const cache={keys:[],expires:0,refreshed:0};let loads=0;const counted=async(...args)=>{loads++;return load(...args)};
+ assert(await githubOidcIdentity(await sign(claims),ts*1000,counted,()=>{},cache));
+ assert(await githubOidcIdentity(await sign(claims),ts*1000+1000,counted,()=>{},cache));assert.equal(loads,1);
+ const staleTrace=[];assert.equal(await githubOidcIdentity(await sign(claims),ts*1000+61000,async()=>{throw Error('offline')},c=>staleTrace.push(c),cache),null);assert.equal(staleTrace.at(-1),'jwks_fetch_exception');
+ const other=(await sign(claims)).split('.');other[0]=enc({alg:'RS256',kid:'new-key'});
+ let refreshes=0;const reload=async()=>{refreshes++;return Response.json({keys:[jwk]})};
+ assert.equal(await githubOidcIdentity(other.join('.'),ts*1000+6000,reload,()=>{},cache),null);assert.equal(refreshes,1);
+ assert.equal(await githubOidcIdentity(other.join('.'),ts*1000+7000,reload,()=>{},cache),null);assert.equal(refreshes,1);
+ summary.jwks_cache_ttl=true;summary.jwks_unknown_kid_throttle=true;
+ const windowStart=Math.floor((v+50*86400000)/1800000)*1800000;
+ const windowEnv={DB:db,RC_MODE:'synthetic',RC_OBSERVE_START:String(windowStart),RC_OBSERVE_END:String(windowStart+7*86400000),RC_ENABLE_DISPATCH:'1',RC_GITHUB_TOKEN:'fixture-only',RC_MAX_LAUNCHES:'1'};
+ assert.equal(observationWindow(windowEnv,windowStart-1).active,false);assert(observationWindow(windowEnv,windowStart).active);assert.equal(observationWindow(windowEnv,windowStart+7*86400000).active,false);
+ assert.equal((await tick(windowEnv,windowStart-1,fake)).action,'outside_window');
+ assert.equal((await tick(windowEnv,windowStart,fake)).action,'uncertain_wait_for_expiry');
+ assert.equal((await tick(windowEnv,windowStart+600001,fake)).action,'skip');
+ assert.equal((await tick(windowEnv,windowStart+1800000,fake)).action,'skip');
+ assert.equal((await db.prepare('SELECT count(*) n FROM rc_lease WHERE slot=?').bind(windowStart+1800000).first()).n,0);
+ assert.equal((await tick(windowEnv,windowStart+7*86400000,fake)).action,'outside_window');summary.observation_window_and_atomic_budget=true;
  const bd=v+40*86400000;const reservations=await Promise.all(Array.from({length:12},()=>reserveBudget(db,bd,0,1,10,1,3)));assert.equal(reservations.filter(Boolean).length,3);assert.equal(await reserveBudget(db,bd,4001),false);assert.equal(await reserveBudget(db,bd,0,0,1500001),false);assert.equal(await reserveBudget(db,bd,0,0,0,12001),false);
  summary.oidc_claim_rejection_cases=15;summary.oidc_replay_rejected=true;summary.budget_atomic=true;
  const old91=new Date(v-91*86400000).toISOString(),old31=new Date(v-31*86400000-1800000).toISOString();await db.prepare('INSERT INTO rc_samples VALUES(?,?,?,?)').bind('music-web',old91,'ok',1).run();await db.prepare('INSERT INTO rc_samples VALUES(?,?,?,?)').bind('music-web',old31,'ok',1).run();await maintenance(db,v);assert.equal((await db.prepare('SELECT COUNT(*) n FROM rc_samples WHERE checked_at=?').bind(old91).first()).n,0);assert.equal((await db.prepare('SELECT COUNT(*) n FROM rc_samples WHERE checked_at=?').bind(old31).first()).n,1);const hist=(await (await history(db,new Request('http://local/api/history'),v+3600000)).json()).series;assert(Object.values(hist).flat().every(x=>Date.parse(x[0])>=v+3600000-1800000-30*86400000));summary.retention_90_30=true;
