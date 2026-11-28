@@ -128,7 +128,7 @@ export async function githubOidcIdentity(token: string, now=Date.now(), load:typ
 
 
 // Private, bounded diagnostic evidence; no raw claims, kid, JWT, URL or headers.
-const OIDC_DIAG_VERSION="rc2-stage5-ops-1";
+const OIDC_DIAG_VERSION="rc2-stage5-ops-2";
 async function auditOidc(db:DB,now:number,ray:string,steps:any[]){
  try{
   if(!await reserveBudget(db,now,0,0,80,4))return;
@@ -169,9 +169,16 @@ export async function acquire(db:DB,now:number,owner:string|null=null){
  const row=await db.prepare("INSERT INTO rc_lease(slot,token,expires,state,owner) SELECT ?,?,?,'reserved',? WHERE NOT EXISTS(SELECT 1 FROM rc_latest WHERE slot>=?) AND NOT EXISTS(SELECT 1 FROM rc_lease WHERE state IN ('reserved','running') AND expires>? AND slot!=?) ON CONFLICT(slot) DO UPDATE SET token=excluded.token,expires=excluded.expires,state='reserved',attempts=rc_lease.attempts+1,owner=excluded.owner,started_at=NULL,dispatch_ms=NULL,dispatch_at=NULL,finished_at=NULL WHERE rc_lease.state!='done' AND rc_lease.attempts<2 AND rc_lease.expires<=? RETURNING token").bind(slot,token,now+LEASE,owner,slot,now,slot,now).first();
  return row?{slot,token}:null;
 }
-export async function start(db:DB,claim:{slot:number;token:string},now:number,owner='fixture'){
+// Scheduled claims use the signed run identity, not a secret passed in workflow inputs.
+export async function scheduledClaim(db:DB,slot:number,owner:string,now:number){
+ if(!Number.isSafeInteger(slot)||slot!==epoch(now)||!/^\d{1,20}:1$/.test(owner))return null;
+ const runId=owner.split(":")[0];
+ const row=await db.prepare("UPDATE rc_lease SET owner=? WHERE slot=? AND state='reserved' AND (owner IS NULL OR owner=?) AND expires>? AND EXISTS(SELECT 1 FROM rc_dispatch_evidence WHERE slot=? AND http_status=200 AND run_id=?) RETURNING token").bind(owner,slot,owner,now,slot,runId).first();
+ return row?{slot,token:row.token}:null;
+}
+export async function start(db:DB,claim:{slot:number;token:string},now:number,owner='fixture',requireOwner=false){
  if(!Number.isSafeInteger(claim?.slot)||typeof claim?.token!=="string")return false;
- const r=await db.prepare("UPDATE rc_lease SET state='running',owner=?,started_at=?,expires=? WHERE slot=? AND token=? AND state='reserved' AND (owner IS NULL OR owner=?) AND expires>? RETURNING token").bind(owner,now,now+LEASE,claim.slot,claim.token,owner,now).first();return !!r;
+ const r=await db.prepare("UPDATE rc_lease SET state='running',owner=?,started_at=?,expires=? WHERE slot=? AND token=? AND state='reserved' AND (owner=? OR (owner IS NULL AND ?=0)) AND expires>? RETURNING token").bind(owner,now,now+LEASE,claim.slot,claim.token,owner,requireOwner?1:0,now).first();return !!r;
 }
 export async function publish(db:DB,claim:{slot:number;token:string},input:any,now:number,owner='fixture'){
  const data=safeStatus(input);
@@ -244,12 +251,12 @@ export async function tick(env:Env,now:number,send:typeof fetch=fetch){
  if(env.RC_LOCAL_ONLY!=="1"&&!observationWindow(env,now).active)return {action:"outside_window"};
  const claim=await budgetedAcquire(env,now);if(!claim)return {action:"skip"};
  const began=Date.now();await env.DB.prepare("UPDATE rc_lease SET dispatch_at=? WHERE slot=? AND token=?").bind(now,claim.slot,claim.token).run();
- try{const r=await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches",{method:"POST",redirect:"manual",signal:AbortSignal.timeout(10000),headers:{Authorization:"Bearer "+env.RC_GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"YandexPulse-Scheduler/2.0","Content-Type":"application/json"},body:JSON.stringify({ref:"research/pulse-architecture-20261128",inputs:{slot:String(claim.slot),lease:claim.token}})});
+ try{const r=await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches",{method:"POST",redirect:"manual",signal:AbortSignal.timeout(10000),headers:{Authorization:"Bearer "+env.RC_GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2026-03-10","User-Agent":"YandexPulse-Scheduler/2.0","Content-Type":"application/json"},body:JSON.stringify({ref:"research/pulse-architecture-20261128",inputs:{slot:String(claim.slot),lease:""}})});
  await env.DB.prepare("UPDATE rc_lease SET dispatch_ms=? WHERE slot=? AND token=?").bind(Date.now()-began,claim.slot,claim.token).run();
  let runId:string|null=null;
  if(r.status===200){try{const x:any=await r.json();if(Number.isSafeInteger(x.workflow_run_id)&&x.workflow_run_id>0)runId=String(x.workflow_run_id);}catch{}}
  await env.DB.prepare("INSERT OR REPLACE INTO rc_dispatch_evidence(slot,at,http_status,run_id) VALUES(?,?,?,?)").bind(claim.slot,now,r.status,runId).run();
- return {action:r.status===200||r.status===204?"accepted":"uncertain_wait_for_expiry",slot:claim.slot};
+ return {action:r.status===200&&runId?"accepted":"uncertain_wait_for_expiry",slot:claim.slot};
  }catch{return {action:"uncertain_wait_for_expiry",slot:claim.slot};}
 }
 export async function manualTrigger(request:Request,env:Env,now:number,send:typeof fetch=fetch){
@@ -264,7 +271,7 @@ export async function manualTrigger(request:Request,env:Env,now:number,send:type
  }
  const verified=await send("https://challenges.cloudflare.com/turnstile/v0/siteverify",{method:"POST",redirect:"manual",signal:AbortSignal.timeout(8000),body:new URLSearchParams({secret:env.RC_TURNSTILE_SECRET,response:body.turnstileToken})});
  if(!verified.ok)return response({error:"turnstile_unavailable"},503);
- const v:any=await verified.json();const accepted=v.success===true&&v.hostname===new URL(env.RC_ORIGIN).hostname;
+ const v:any=await verified.json();const accepted=v.success===true&&v.hostname===new URL(env.RC_ORIGIN).hostname&&v.action==="pulse-rc-trigger";
  if(verifyOnly){
   const allowed=new Set(["missing-input-secret","invalid-input-secret","missing-input-response","invalid-input-response","bad-request","timeout-or-duplicate","internal-error"]);
   const codes=Array.isArray(v["error-codes"])?v["error-codes"].filter((x:any)=>allowed.has(x)):[];
@@ -301,7 +308,7 @@ export default {
  try{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors});
  if(path.startsWith("/api/")&&!await reserveBudget(env.DB,now,1,0,32,2))return response({error:"staging_budget_exhausted"},429,{...cors,"Retry-After":"3600"});
- if(req.method==="GET"&&path==="/api/health"){const row=await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();const lease=await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();return response({ok:true,version:"2.0.0-rc.2",build:OIDC_DIAG_VERSION,environment:"staging",mode:env.RC_MODE||"synthetic",trigger_ready:!!(env.RC_ENABLE_DISPATCH==="1"&&env.RC_GITHUB_TOKEN&&env.RC_TURNSTILE_SECRET&&env.RC_TURNSTILE_SITE_KEY),last_observation:row?.generated_at||null,stale:!row||now-Date.parse(row.generated_at)>90*60000,last_slot:row?.slot||null,lease:lease?{slot:lease.slot,state:lease.state,expires:iso(lease.expires),dispatch_ms:lease.dispatch_ms,runner_wait_ms:lease.started_at&&lease.dispatch_at?Math.max(0,lease.started_at-lease.dispatch_at):null,started_at:lease.started_at?iso(lease.started_at):null,finished_at:lease.finished_at?iso(lease.finished_at):null}:null},200,cors);}
+ if(req.method==="GET"&&path==="/api/health"){const row=await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();const lease=await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();return response({ok:true,version:"2.0.0-rc.2",build:OIDC_DIAG_VERSION,environment:"staging",mode:env.RC_MODE||"synthetic",trigger_ready:!!(observationWindow(env,now).active&&env.RC_ENABLE_DISPATCH==="1"&&env.RC_GITHUB_TOKEN&&env.RC_TURNSTILE_SECRET&&env.RC_TURNSTILE_SITE_KEY),last_observation:row?.generated_at||null,stale:!row||now-Date.parse(row.generated_at)>90*60000,last_slot:row?.slot||null,lease:lease?{slot:lease.slot,state:lease.state,expires:iso(lease.expires),dispatch_ms:lease.dispatch_ms,runner_wait_ms:lease.started_at&&lease.dispatch_at?Math.max(0,lease.started_at-lease.dispatch_at):null,started_at:lease.started_at?iso(lease.started_at):null,finished_at:lease.finished_at?iso(lease.finished_at):null}:null},200,cors);}
  if(req.method==="GET"&&path==="/api/status"){const row=await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();if(!row)return response({error:"waiting"},503,cors);const tag='"s-'+row.revision+'"';return req.headers.get("If-None-Match")===tag?response(null,304,{...cors,ETag:tag}):response({...JSON.parse(row.payload),environment:"staging",data_mode:JSON.parse(row.payload).data_mode||"synthetic"},200,{...cors,ETag:tag});}
  if(req.method==="GET"&&path==="/api/history")return await history(env.DB,req,now,cors);
  if(req.method==="POST"&&path==="/api/trigger"){const result=await manualTrigger(req,env,now);return new Response(result.body,{status:result.status,headers:{...Object.fromEntries(result.headers.entries()),...cors}});}
@@ -310,10 +317,17 @@ export default {
  if(req.method==="POST"&&(path==="/api/rc/acquire"||path==="/api/rc/start"||path==="/api/rc/ingest")){
  const identity=await authorized(req,env);if(!identity)return response({error:"unauthorized"},401,cors);
  if(env.RC_LOCAL_ONLY!=="1"&&((env.RC_ENABLE_INGEST!=="1"&&env.RC_ENABLE_DISPATCH!=="1")||env.RC_PAUSED==="1"||(observationWindow(env,now).valid&&!observationWindow(env,now).active)))return response({error:"staging_disabled"},503,cors);
- if(path.endsWith("acquire")){if(env.RC_LOCAL_ONLY!=="1"&&observationWindow(env,now).active)return response({error:"scheduled_lease_required"},409,cors);const claim=await budgetedAcquire(env,now,identity.owner);return response(claim||{error:"busy_or_budget"},claim?200:409,cors);}
+ if(path.endsWith("acquire")){
+  if(env.RC_LOCAL_ONLY!=="1"&&observationWindow(env,now).active){
+   const data=await req.json().catch(()=>null) as any;
+   const claim=await scheduledClaim(env.DB,data?.slot,identity.owner,now);
+   return response(claim||{error:"scheduled_lease_unavailable"},claim?200:409,cors);
+  }
+  const claim=await budgetedAcquire(env,now,identity.owner);return response(claim||{error:"busy_or_budget"},claim?200:409,cors);
+ }
  if(Number(req.headers.get("Content-Length")||0)>100000)return response({error:"too_large"},413,cors);
  const raw=await req.text();if(new TextEncoder().encode(raw).length>100000)return response({error:"too_large"},413,cors);
- const data=JSON.parse(raw);if(path.endsWith("/start")){const ok=await start(env.DB,data.claim,now,identity.owner);return response({ok},ok?200:409,cors);}const mode=env.RC_MODE||"synthetic";if(env.RC_LOCAL_ONLY!=="1"&&data.payload?.data_mode!==mode)return response({error:"mode_mismatch"},422,cors);if(!await reserveBudget(env.DB,now,0,0,128,100))return response({error:"staging_budget_exhausted"},429,cors);const ok=await publish(env.DB,data.claim,data.payload,now,identity.owner);return response({ok},ok?200:409,cors);}
+ const data=JSON.parse(raw);if(path.endsWith("/start")){const ok=await start(env.DB,data.claim,now,identity.owner,observationWindow(env,now).active);return response({ok},ok?200:409,cors);}const mode=env.RC_MODE||"synthetic";if(env.RC_LOCAL_ONLY!=="1"&&data.payload?.data_mode!==mode)return response({error:"mode_mismatch"},422,cors);if(!await reserveBudget(env.DB,now,0,0,128,100))return response({error:"staging_budget_exhausted"},429,cors);const ok=await publish(env.DB,data.claim,data.payload,now,identity.owner);return response({ok},ok?200:409,cors);}
  if(req.method==="GET"&&path==="/api-config.js")return new Response("window.PULSE_API_CONFIG="+JSON.stringify({apiUrl:url.origin,turnstileSiteKey:env.RC_TURNSTILE_SITE_KEY||"",staging:true})+";",{headers:{"Content-Type":"application/javascript","Cache-Control":"no-store"}});
  if(req.method==="GET"&&!path.startsWith("/api/")&&env.ASSETS)return env.ASSETS.fetch(req);
  return response({error:"not_found"},404,cors);

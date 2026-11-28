@@ -30,4 +30,7 @@ jobs:
           git add -f research/results/pulse2/rc2-prebuilt/pulse-core-rc research/results/pulse2/rc2-prebuilt/manifest.json
           git diff --cached --quiet && exit 0
           git commit -m 'RC2: archive verified single public native Core [skip ci]'
+          git fetch origin refs/heads/research/pulse-architecture-20261128
+          test "$(git rev-parse FETCH_HEAD:research/pulse2-rc)" = "$(git rev-parse HEAD:research/pulse2-rc)"
+          git rebase FETCH_HEAD
           git push origin HEAD:refs/heads/research/pulse-architecture-20261128

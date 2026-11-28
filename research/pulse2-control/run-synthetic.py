@@ -37,7 +37,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 # Never log arbitrary response bodies, headers, URLs, JWTs, or exceptions.
 OPERATIONS = {"health", "oidc", "acquire", "start", "ingest"}
 ERROR_CODES = {"unauthorized", "staging_disabled", "busy_or_budget", "staging_budget_exhausted",
-               "invalid_or_unavailable", "mode_mismatch", "too_large", "not_found", "waiting"}
+               "invalid_or_unavailable", "mode_mismatch", "too_large", "not_found", "waiting", "scheduled_lease_unavailable"}
 EXPECTED_CLAIMS = {
     "iss": "https://token.actions.githubusercontent.com",
     "aud": "yandex-pulse-rc-ingest",
@@ -158,10 +158,20 @@ def main():
                         headers={"Authorization": "Bearer " + fresh_token(), "Content-Type": "application/json"}))
     slot = os.environ.get("PULSE_RC_SLOT", "")
     lease = os.environ.get("PULSE_RC_LEASE", "")
-    if bool(slot) != bool(lease) or (slot and (not re.fullmatch(r"[0-9]{13}", slot) or not re.fullmatch(r"[0-9a-f-]{36}", lease))):
+    if (lease and not slot) or (slot and not re.fullmatch(r"[0-9]{13}", slot)) or (lease and not re.fullmatch(r"[0-9a-f-]{36}", lease)):
         raise RuntimeError("invalid staging lease")
     try:
-        claim = {"slot": int(slot), "token": lease} if slot else post("/api/rc/acquire", {})
+        if slot and not lease:
+            # Bounded wait for the dispatch response to be committed; fresh OIDC for each attempt.
+            for attempt in range(3):
+                try:
+                    claim = post("/api/rc/acquire", {"slot": int(slot)})
+                    break
+                except urllib.error.HTTPError as exc:
+                    if exc.code != 409 or attempt == 2:raise
+                    time.sleep(2)
+        else:
+            claim = {"slot": int(slot), "token": lease} if slot else post("/api/rc/acquire", {})
         if post("/api/rc/start", {"claim": claim}).get("ok") is not True:
             raise RuntimeError("start rejected")
     except urllib.error.HTTPError:

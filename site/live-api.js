@@ -123,7 +123,7 @@
     try {
       const turnstile=await getTurnstile();
       turnstile.render(host,{
-        sitekey:key,theme:"auto",size:"flexible",
+        sitekey:key,theme:"auto",size:"flexible",...(settings.staging===true?{action:"pulse-rc-trigger"}:{}),
         callback:async token=>{
           if(pending)return;
           pending=true;
