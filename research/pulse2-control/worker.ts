@@ -154,7 +154,7 @@ export async function tick(env:Env,now:number,send:typeof fetch=fetch){
  if(env.RC_ENABLE_DISPATCH!=="1"||!env.RC_GITHUB_TOKEN||(env.RC_LOCAL_ONLY==="1"&&send===fetch))return {action:"disabled"};
  const claim=await acquire(env.DB,now);if(!claim)return {action:"skip"};
  const began=Date.now();await env.DB.prepare("UPDATE rc_lease SET dispatch_at=? WHERE slot=? AND token=?").bind(now,claim.slot,claim.token).run();
- try{const r=await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches",{method:"POST",redirect:"error",signal:AbortSignal.timeout(10000),headers:{Authorization:"Bearer "+env.RC_GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"Pulse-RC","Content-Type":"application/json"},body:JSON.stringify({ref:"research/pulse-architecture-20261128",inputs:{slot:String(claim.slot),lease:claim.token}})});
+ try{const r=await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches",{method:"POST",redirect:"error",signal:AbortSignal.timeout(10000),headers:{Authorization:"Bearer "+env.RC_GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"YandexPulse-Scheduler/2.0","Content-Type":"application/json"},body:JSON.stringify({ref:"research/pulse-architecture-20261128",inputs:{slot:String(claim.slot),lease:claim.token}})});
  await env.DB.prepare("UPDATE rc_lease SET dispatch_ms=? WHERE slot=? AND token=?").bind(Date.now()-began,claim.slot,claim.token).run();
  return {action:r.ok?"accepted":"uncertain_wait_for_expiry",slot:claim.slot};
  }catch{return {action:"uncertain_wait_for_expiry",slot:claim.slot};}

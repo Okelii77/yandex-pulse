@@ -6,7 +6,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 opener=urllib.request.build_opener(NoRedirect)
 def request(path, expected, method="GET", headers=None):
     t=time.monotonic()
-    req=urllib.request.Request(BASE+path, method=method, data=b"{}" if method=="POST" else None, headers=headers or {})
+    req=urllib.request.Request(BASE+path, method=method, data=b"{}" if method=="POST" else None, headers={"User-Agent":"YandexPulse-RC2-Smoke/2.0", **(headers or {})})
     try:
         response=opener.open(req,timeout=10)
     except urllib.error.HTTPError as e:

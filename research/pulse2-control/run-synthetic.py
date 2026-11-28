@@ -50,6 +50,7 @@ def main():
     if base != ORIGIN:
         raise RuntimeError("staging origin mismatch")
     opener = urllib.request.build_opener(NoRedirect)
+    opener.addheaders = [("User-Agent", "YandexPulse-Core/2.0")]
     def get_json(req):
         with opener.open(req, timeout=20) as response:
             return json.load(response)

@@ -15,6 +15,7 @@ def main():
  class NoRedirect(urllib.request.HTTPRedirectHandler):
   def redirect_request(self,*args,**kwargs):return None
  opener=urllib.request.build_opener(NoRedirect)
+ opener.addheaders=[('User-Agent','YandexPulse-Core/2.0')]
  oidc=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'];sep='&' if '?' in oidc else '?'
  req=urllib.request.Request(oidc+sep+'audience=yandex-pulse-rc-ingest',headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
  with opener.open(req,timeout=15) as r:token=json.load(r)['value']
