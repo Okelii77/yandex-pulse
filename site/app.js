@@ -145,9 +145,11 @@
   }
   function serviceCard(check,row) {
     const status = row?.status || "unknown";
+    const observed=Date.parse(row?.checked_at);
+    const staleRow=["ok","down","degraded","no_data"].includes(status)&&(!Number.isFinite(observed)||Date.now()-observed>Math.max(90,(state.data?.interval_minutes||30)*2.5)*60000);
     return '<button type="button" class="service-card" data-check="'+esc(check.id)+'" aria-label="Подробнее: '+esc(check.name)+' · '+esc((STATES[status]||STATES.unknown)[0])+'">' +
       '<span class="service-icon">'+icon(cat(check.category)?.icon)+'</span>' +
-      '<span class="service-desc"><span class="service-name">'+esc(check.name)+'</span><span class="service-sub">'+esc(check.detail)+'</span>' +
+      '<span class="service-desc"><span class="service-name">'+esc(check.name)+'</span><span class="service-sub">'+esc(check.detail)+(staleRow?' · Данные устарели':'')+'</span>' +
       (state.category==="overview"?'<span class="service-category">'+esc(cat(check.category)?.title || "")+'</span>':"") +
       '</span><span class="service-right">'+bars(check.id)+'<span class="mini-latency">'+fmtMs(row?.latency_ms)+'</span>'+
       badge(status)+'<span class="card-arrow" aria-hidden="true">›</span></span></button>';
@@ -578,7 +580,9 @@
       });
     }
     reload(true);
-    setInterval(()=>reload(true),60000);
+    const poll=async()=>{await reload(true);setTimeout(poll,document.hidden?300000:state.loadFailed?120000:60000);};
+    setTimeout(poll,60000);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)reload(true);});
     setInterval(renderHero,30000);
   }
   init();

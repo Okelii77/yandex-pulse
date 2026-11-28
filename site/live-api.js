@@ -4,7 +4,7 @@
   const settings=window.PULSE_API_CONFIG || {};
   const base=String(settings.apiUrl || "").trim().replace(/\/+$/, "");
   const key=String(settings.turnstileSiteKey || "").trim();
-  const enabled=() => /^https:\/\/[a-z0-9.-]+$/i.test(base);
+  const enabled=() => /^https:\/\/[a-z0-9.-]+$/i.test(base) || (settings.localFixture===true && /^http:\/\/127\.0\.0\.1:\d+$/.test(base));
   let triggerReady=false;
   async function refreshCapabilities(){
     if(!enabled()||!key)return false;
@@ -17,22 +17,44 @@
     if(!r.ok)throw new Error("API HTTP "+r.status);
     return r.json();
   }
-  let lastHistory=null, historyRevision=null, historyLoadedAt=0;
+  let lastHistory=null, historyRevision=null, historyLoadedAt=0, lastStatus=null, statusTag=null, historyTag=null;
+  async function conditional(path,tag){
+    const headers={Accept:"application/json"};
+    if(tag)headers["If-None-Match"]=tag;
+    const r=await fetch(base+path,{headers,cache:"no-store",signal:AbortSignal.timeout(8000)});
+    if(r.status===304){if(!tag)throw Error("Unexpected 304");return {same:true};}
+    if(!r.ok)throw Error("API HTTP "+r.status);
+    return {data:await r.json(),tag:r.headers?.get?.("ETag")||null};
+  }
   async function snapshot(onStatus=()=>{}) {
     if(!enabled())throw Error("Worker API is not configured");
-    const status=await read("/api/status");
+    const next=await conditional("/api/status",statusTag);
+    const status=next.same?lastStatus:next.data;
     if(!status || !Array.isArray(status.results) || !Array.isArray(status.checks) ||
-       !Number.isFinite(Date.parse(status.generated_at)))
-      throw Error("Unexpected Worker response");
+       !Number.isFinite(Date.parse(status.generated_at)))throw Error("Unexpected Worker response");
+    if(lastStatus&&Date.parse(status.generated_at)<Date.parse(lastStatus.generated_at))throw Error("Stale status");
+    lastStatus=status;if(!next.same)statusTag=next.tag;
     onStatus(status);
-    if(historyRevision!==status.generated_at || Date.now()-historyLoadedAt>=300000){
+    const rcRevision=typeof lastHistory?.revision==="string"&&/^\d+-\d+$/.test(lastHistory.revision);
+    if(historyRevision!==status.generated_at || Date.now()-historyLoadedAt>=300000 || rcRevision){
       try {
-        const next=await read("/api/history");
-        if(!next || !next.series || typeof next.series!=="object" || Array.isArray(next.series))
-          throw Error("Unexpected history response");
-        lastHistory=next;
-        historyRevision=status.generated_at;
-        historyLoadedAt=Date.now();
+        const suffix=rcRevision?"?since="+encodeURIComponent(lastHistory.revision):"";
+        let h=await conditional("/api/history"+suffix,historyTag);
+        if(!h.same){
+          let data=h.data;
+          if(data?.replace){
+            if(!lastHistory||data.base_revision!==lastHistory.revision||typeof data.revision!=="string"||typeof data.full_etag!=="string"||!Array.isArray(data.remove)){
+              h=await conditional("/api/history",null);data=h.data;
+            }else{
+              const series={...lastHistory.series,...data.replace};for(const k of data.remove)delete series[k];
+              h.tag=data.full_etag;data={schema:1,retention_days:30,revision:data.revision,as_of:data.as_of,series};
+            }
+          }
+          if(!data?.series || typeof data.series!=="object" || Array.isArray(data.series))throw Error("Unexpected history response");
+          lastHistory=data;historyTag=h.tag;
+        }
+        if(!lastHistory)throw Error("Missing history");
+        historyRevision=status.generated_at;historyLoadedAt=Date.now();
       } catch { return {status,history:lastHistory,historyFresh:false}; }
     }
     return {status,history:lastHistory,historyFresh:true};
