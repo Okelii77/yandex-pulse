@@ -1,0 +1,42 @@
+[
+  {
+    "case": "valid",
+    "results": {
+      "music-history": "ok",
+      "music-queues": "ok",
+      "music-rest": "ok"
+    }
+  },
+  {
+    "case": "empty",
+    "results": {
+      "music-history": "no_data",
+      "music-queues": "no_data",
+      "music-rest": "ok"
+    }
+  },
+  {
+    "case": "malformed",
+    "results": {
+      "music-history": "degraded",
+      "music-queues": "degraded",
+      "music-rest": "degraded"
+    }
+  },
+  {
+    "case": "auth_and_limit",
+    "results": {
+      "music-history": "degraded",
+      "music-queues": "down",
+      "music-rest": "down"
+    }
+  },
+  {
+    "case": "redirect",
+    "results": {
+      "music-history": "degraded",
+      "music-queues": "no_data",
+      "music-rest": "down"
+    }
+  }
+]
