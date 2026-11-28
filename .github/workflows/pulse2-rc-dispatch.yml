@@ -16,17 +16,28 @@ permissions:
   id-token: write
 jobs:
   stage:
-    if: github.repository == 'Okelii77/yandex-pulse' && github.ref == 'refs/heads/research/pulse-architecture-20261128' && vars.PULSE_RC2_SYNTHETIC_ENABLED == '1'
+    if: github.repository == 'Okelii77/yandex-pulse' && github.ref == 'refs/heads/research/pulse-architecture-20261128'
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
+    timeout-minutes: 12
+    concurrency:
+      group: pulse-rc2-synthetic
+      cancel-in-progress: false
     environment: pulse-rc
     steps:
+      - name: Check environment opt-in
+        env:
+          ENABLED: ${{ vars.PULSE_RC2_SYNTHETIC_ENABLED }}
+        run: test "$ENABLED" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12.16'
+      - name: Build locked Rust Core
+        run: |
+          rustup toolchain install 1.100.1 --profile minimal
+          cargo +1.100.1 build --release --locked --manifest-path research/pulse2-rc/Cargo.toml --bin pulse-core-rc
       - name: Synthetic staging snapshot (no Yandex requests)
         run: python research/pulse2-control/run-synthetic.py
         env:

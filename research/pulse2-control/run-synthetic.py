@@ -83,7 +83,13 @@ def main():
             return
         raise
     started = time.monotonic()
+    import runpy
+    native=runpy.run_path(str(ROOT / 'research/pulse2-control/run-rust-fixture.py'))['run'](catalog)
     data = payload(catalog, dt.datetime.now(dt.timezone.utc))
+    measured={r['id']:r for r in native}
+    for row in data['results']:
+        if row['id'] in measured:
+            row.update(measured[row['id']],reason='SYNTHETIC LOOPBACK NATIVE CORE — NOT YANDEX')
     print("RC synthetic fixture_ms", round((time.monotonic() - started) * 1000))
     started = time.monotonic()
     if post("/api/rc/ingest", {"claim": claim, "payload": data}).get("ok") is not True:

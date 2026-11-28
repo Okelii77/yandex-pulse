@@ -1,0 +1,30 @@
+name: RC2 native fixture and static asset preparation
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-rc2-native-assets.yml']
+permissions:
+  contents: read
+jobs:
+  fixture:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Export public PNG bytes for API deployment
+        run: |
+          python3 - <<'PY'
+          import base64,json,pathlib,hashlib
+          for p in sorted(pathlib.Path('site').glob('*.png')):
+              b=p.read_bytes()
+              assert b.startswith(b'\x89PNG\r\n\x1a\n')
+              print('RC2_PUBLIC_PNG '+json.dumps(dict(name=p.name,sha256=hashlib.sha256(b).hexdigest(),data=base64.b64encode(b).decode())))
+          PY
+      - name: Build locked Rust Core
+        run: |
+          rustup toolchain install 1.100.1 --profile minimal
+          cargo +1.100.1 build --release --locked --manifest-path research/pulse2-rc/Cargo.toml --bin pulse-core-rc
+      - run: python3 research/pulse2-control/run-rust-fixture.py

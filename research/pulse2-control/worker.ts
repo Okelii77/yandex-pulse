@@ -111,20 +111,20 @@ export async function reserveBudget(db:DB,now:number,api=0,launch=0,reads=0,writ
 export async function consumeOidc(db:DB,id:{owner:string;jti:string;expires:number}){
  const r=await db.prepare("INSERT OR IGNORE INTO rc_oidc_used(jti,expires) VALUES(?,?) RETURNING jti").bind(id.jti,id.expires).first();return !!r;
 }
-async function budgetedAcquire(env:Env,now:number){
- const claim=await acquire(env.DB,now);if(!claim)return null;
+async function budgetedAcquire(env:Env,now:number,owner?:string){
+ const claim=await acquire(env.DB,now,owner);if(!claim)return null;
  const max=Math.max(1,Math.min(BUDGET.launch,Number(env.RC_MAX_LAUNCHES)||1));
  if(!await reserveBudget(env.DB,now,0,1,64,8,max))return null;
  return claim;
 }
-export async function acquire(db:DB,now:number){
+export async function acquire(db:DB,now:number,owner:string|null=null){
  const slot=epoch(now),token=crypto.randomUUID();
- const row=await db.prepare("INSERT INTO rc_lease(slot,token,expires,state) SELECT ?,?,?,'reserved' WHERE NOT EXISTS(SELECT 1 FROM rc_latest WHERE slot>=?) AND NOT EXISTS(SELECT 1 FROM rc_lease WHERE state IN ('reserved','running') AND expires>? AND slot!=?) ON CONFLICT(slot) DO UPDATE SET token=excluded.token,expires=excluded.expires,state='reserved',attempts=rc_lease.attempts+1,owner=NULL,started_at=NULL,dispatch_ms=NULL,dispatch_at=NULL,finished_at=NULL WHERE rc_lease.state!='done' AND rc_lease.attempts<2 AND rc_lease.expires<=? RETURNING token").bind(slot,token,now+LEASE,slot,now,slot,now).first();
+ const row=await db.prepare("INSERT INTO rc_lease(slot,token,expires,state,owner) SELECT ?,?,?,'reserved',? WHERE NOT EXISTS(SELECT 1 FROM rc_latest WHERE slot>=?) AND NOT EXISTS(SELECT 1 FROM rc_lease WHERE state IN ('reserved','running') AND expires>? AND slot!=?) ON CONFLICT(slot) DO UPDATE SET token=excluded.token,expires=excluded.expires,state='reserved',attempts=rc_lease.attempts+1,owner=excluded.owner,started_at=NULL,dispatch_ms=NULL,dispatch_at=NULL,finished_at=NULL WHERE rc_lease.state!='done' AND rc_lease.attempts<2 AND rc_lease.expires<=? RETURNING token").bind(slot,token,now+LEASE,owner,slot,now,slot,now).first();
  return row?{slot,token}:null;
 }
 export async function start(db:DB,claim:{slot:number;token:string},now:number,owner='fixture'){
  if(!Number.isSafeInteger(claim?.slot)||typeof claim?.token!=="string")return false;
- const r=await db.prepare("UPDATE rc_lease SET state='running',owner=?,started_at=?,expires=? WHERE slot=? AND token=? AND state='reserved' AND expires>? RETURNING token").bind(owner,now,now+LEASE,claim.slot,claim.token,now).first();return !!r;
+ const r=await db.prepare("UPDATE rc_lease SET state='running',owner=?,started_at=?,expires=? WHERE slot=? AND token=? AND state='reserved' AND (owner IS NULL OR owner=?) AND expires>? RETURNING token").bind(owner,now,now+LEASE,claim.slot,claim.token,owner,now).first();return !!r;
 }
 export async function publish(db:DB,claim:{slot:number;token:string},input:any,now:number,owner='fixture'){
  const data=safeStatus(input);
@@ -145,6 +145,7 @@ export async function publish(db:DB,claim:{slot:number;token:string},input:any,n
 }
 export async function maintenance(db:DB,now:number){await db.batch([db.prepare("DELETE FROM rc_oidc_used WHERE expires<=?").bind(now),db.prepare("DELETE FROM rc_daily_budget WHERE day<?").bind(Math.floor(now/DAY)*DAY-7*DAY),db.prepare("DELETE FROM rc_samples WHERE checked_at<?").bind(iso(now-90*DAY)),db.prepare("DELETE FROM rc_history WHERE epoch<?").bind(epoch(now)-4*SLOT),db.prepare("DELETE FROM rc_history_lock WHERE expires<=?").bind(now),db.prepare("DELETE FROM rc_lease WHERE slot<? AND expires<=?").bind(epoch(now)-7*DAY,now)]);}
 export async function history(db:DB,request:Request,now:number,headers:Record<string,string>={}){
+ const began=Date.now();
  const latest=await db.prepare("SELECT revision FROM rc_latest WHERE id=1").first();if(!latest)return response({error:"waiting"},503,headers);
  const e=epoch(now),revision=latest.revision+"-"+e,tag='"h-'+revision+'"';
  if(request.headers.get("If-None-Match")===tag)return response(null,304,{...headers,ETag:tag});
@@ -163,7 +164,7 @@ export async function history(db:DB,request:Request,now:number,headers:Record<st
     const series:Record<string,any[]>={};for(const r of q.results)(series[r.check_id]??=[]).push([r.checked_at,r.status,r.latency_ms]);
     const payload=JSON.stringify({schema:1,retention_days:30,revision,as_of:iso(e),series});
     // Fencing checks both source revision and history lease, not merely lock ownership at start.
-    await db.prepare("INSERT OR IGNORE INTO rc_history(revision,epoch,source_rev,payload) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM rc_latest WHERE revision=?) AND EXISTS(SELECT 1 FROM rc_history_lock WHERE revision=? AND token=? AND expires>?)").bind(revision,e,latest.revision,payload,latest.revision,revision,token,Date.now()>now&&Date.now()-now<60000?Date.now():now).run();
+    await db.prepare("INSERT OR IGNORE INTO rc_history(revision,epoch,source_rev,payload) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM rc_latest WHERE revision=?) AND EXISTS(SELECT 1 FROM rc_history_lock WHERE revision=? AND token=? AND expires>?)").bind(revision,e,latest.revision,payload,latest.revision,revision,token,now+Math.max(0,Date.now()-began)).run();
     cached=await db.prepare("SELECT payload FROM rc_history WHERE revision=?").bind(revision).first();
    }
   }finally{await db.prepare("DELETE FROM rc_history_lock WHERE revision=? AND token=?").bind(revision,token).run();}
@@ -221,7 +222,7 @@ export default {
  if(req.method==="POST"&&(path==="/api/rc/acquire"||path==="/api/rc/start"||path==="/api/rc/ingest")){
  const identity=await authorized(req,env);if(!identity)return response({error:"unauthorized"},401,cors);
  if(env.RC_LOCAL_ONLY!=="1"&&env.RC_ENABLE_INGEST!=="1"&&env.RC_ENABLE_DISPATCH!=="1")return response({error:"staging_disabled"},503,cors);
- if(path.endsWith("acquire")){const claim=await budgetedAcquire(env,now);return response(claim||{error:"busy_or_budget"},claim?200:409,cors);}
+ if(path.endsWith("acquire")){const claim=await budgetedAcquire(env,now,identity.owner);return response(claim||{error:"busy_or_budget"},claim?200:409,cors);}
  if(Number(req.headers.get("Content-Length")||0)>100000)return response({error:"too_large"},413,cors);
  const raw=await req.text();if(new TextEncoder().encode(raw).length>100000)return response({error:"too_large"},413,cors);
  const data=JSON.parse(raw);if(path.endsWith("/start")){const ok=await start(env.DB,data.claim,now,identity.owner);return response({ok},ok?200:409,cors);}const mode=env.RC_MODE||"synthetic";if(env.RC_LOCAL_ONLY!=="1"&&data.payload?.data_mode!==mode)return response({error:"mode_mismatch"},422,cors);if(!await reserveBudget(env.DB,now,0,0,128,100))return response({error:"staging_budget_exhausted"},429,cors);const ok=await publish(env.DB,data.claim,data.payload,now,identity.owner);return response({ok},ok?200:409,cors);}
