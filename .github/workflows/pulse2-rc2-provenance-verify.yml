@@ -1,0 +1,38 @@
+name: RC2 provenance and frozen checkout acceptance
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-rc2-provenance-verify.yml']
+permissions:
+  contents: read
+  attestations: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Independently verify pinned build attestation and negative fixtures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh --version
+          b=research/results/pulse2/rc2-prebuilt/pulse-core-rc
+          signer=18f15b2abf6830de930b637ee764d030a884bfc5
+          test "$(git rev-parse HEAD:research/pulse2-rc)" = "$(git rev-parse "$signer:research/pulse2-rc")"
+          verify() {
+            gh attestation verify "$1" --repo Okelii77/yandex-pulse --signer-workflow Okelii77/yandex-pulse/.github/workflows/pulse2-rc2-provenance.yml --signer-digest "$2" --source-digest "$2" --deny-self-hosted-runners
+          }
+          verify "$b" "$signer"
+          if verify "$b" 0000000000000000000000000000000000000000; then exit 1; fi
+          cp "$b" "$RUNNER_TEMP/rc2-tampered"
+          python3 -c 'from pathlib import Path; import sys; p=Path(sys.argv[1]); b=bytearray(p.read_bytes()); b[-1]^=1; p.write_bytes(b)' "$RUNNER_TEMP/rc2-tampered"
+          if verify "$RUNNER_TEMP/rc2-tampered" "$signer"; then exit 1; fi
+          rm -f "$RUNNER_TEMP/rc2-tampered"
+          echo RC2_ATTESTATION_NEGATIVE_OK
+      - name: Verify and copy approved binary (no build)
+        run: python3 research/pulse2-control/prebuilt-core.py
