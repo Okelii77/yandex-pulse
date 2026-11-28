@@ -15,6 +15,8 @@ def request(path, expected, method="GET", headers=None):
         body=response.read()
         status=response.code
         tag=response.headers.get("ETag")
+    if status!=expected:
+        print(json.dumps({"path":path,"status":status,"server":response.headers.get("Server"),"cf_ray":response.headers.get("CF-Ray"),"content_type":response.headers.get("Content-Type"),"location_present":bool(response.headers.get("Location")),"body_preview":body[:500].decode("utf-8","replace")}))
     assert status==expected,(path,status,expected)
     print(json.dumps({"path":path,"status":status,"bytes":len(body),"elapsed_ms":round((time.monotonic()-t)*1000)}))
     return body,tag
