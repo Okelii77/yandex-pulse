@@ -1,0 +1,23 @@
+{
+  "sha256": "cfb4fef958f04ff61268e3632e199225d6d023b53066fcbb07732df44d0220c7",
+  "bytes": 177061,
+  "assets": [
+    "app.js",
+    "apple-touch-icon-v2.png",
+    "apple-touch-icon.png",
+    "favicon-32-v2.png",
+    "favicon.svg",
+    "icon-192-v2.png",
+    "icon-512-v2.png",
+    "icon-v2.svg",
+    "icon.svg",
+    "index.html",
+    "live-api.js",
+    "manifest.webmanifest",
+    "styles.css",
+    "ynison-audit-ui.mjs",
+    "ynison-audit.html",
+    "ynison-har-core.mjs"
+  ],
+  "source": "128a21ebb32c15f99e95933212fe2776f8a67066"
+}
