@@ -30,6 +30,19 @@ const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(co
  const sign=async c=>{const text=enc({alg:'RS256',kid:'fixture-key'})+'.'+enc(c);return text+'.'+Buffer.from(await crypto.subtle.sign('RSASSA-PKCS1-v1_5',keys.privateKey,new TextEncoder().encode(text))).toString('base64url');};
  const load=async()=>Response.json({keys:[jwk]});const id=await githubOidcIdentity(await sign(claims),ts*1000,load);assert(id&&id.owner==='123:1');assert(await consumeOidc(db,id));assert.equal(await consumeOidc(db,id),false);
  for(const patch of [{iss:'wrong'},{aud:'wrong'},{repository_id:'1'},{repository:'wrong/repo'},{ref:'refs/heads/main'},{environment:'production'},{event_name:'push'},{workflow_ref:'wrong'},{sub:'wrong'},{sub:'repo:Okelii77/yandex-pulse:environment:pulse-rc'},{repository_owner_id:'1'},{sub:'repo:Okelii77@1/yandex-pulse@1427282907:environment:pulse-rc'},{exp:ts-1},{nbf:ts+999},{jti:''}])assert.equal(await githubOidcIdentity(await sign({...claims,...patch}),ts*1000,load),null);
+ const traceCases=[];
+ for(const [name,loader,expected] of [
+  ['fetch',async()=>{throw new TypeError('fixture secret');},'jwks_fetch_exception'],
+  ['http',async()=>new Response('',{status:503}),'jwks_http_rejected'],
+  ['json',async()=>new Response('invalid json'),'jwks_json_exception'],
+  ['kid',async()=>Response.json({keys:[]}), 'jwks_key_missing'],
+  ['import',async()=>Response.json({keys:[{...jwk,n:'bad'}]}),'rsa_import_exception'],
+ ]){
+  const trace=[];assert.equal(await githubOidcIdentity(await sign(claims),ts*1000,loader,(code,status)=>trace.push({code,status})),null);assert.equal(trace.at(-1).code,expected,name);traceCases.push(name);
+ }
+ const invalidSignature=(await sign(claims)).split('.');invalidSignature[2]='A'.repeat(invalidSignature[2].length);
+ const badTrace=[];assert.equal(await githubOidcIdentity(invalidSignature.join('.'),ts*1000,load,c=>badTrace.push(c)),null);assert.equal(badTrace.at(-1),'rsa_signature_invalid');
+ summary.oidc_stage_cases=traceCases.length+1;
  const bd=v+40*86400000;const reservations=await Promise.all(Array.from({length:12},()=>reserveBudget(db,bd,0,1,10,1,3)));assert.equal(reservations.filter(Boolean).length,3);assert.equal(await reserveBudget(db,bd,4001),false);assert.equal(await reserveBudget(db,bd,0,0,1500001),false);assert.equal(await reserveBudget(db,bd,0,0,0,12001),false);
  summary.oidc_claim_rejection_cases=15;summary.oidc_replay_rejected=true;summary.budget_atomic=true;
  const old91=new Date(v-91*86400000).toISOString(),old31=new Date(v-31*86400000-1800000).toISOString();await db.prepare('INSERT INTO rc_samples VALUES(?,?,?,?)').bind('music-web',old91,'ok',1).run();await db.prepare('INSERT INTO rc_samples VALUES(?,?,?,?)').bind('music-web',old31,'ok',1).run();await maintenance(db,v);assert.equal((await db.prepare('SELECT COUNT(*) n FROM rc_samples WHERE checked_at=?').bind(old91).first()).n,0);assert.equal((await db.prepare('SELECT COUNT(*) n FROM rc_samples WHERE checked_at=?').bind(old31).first()).n,1);const hist=(await (await history(db,new Request('http://local/api/history'),v+3600000)).json()).series;assert(Object.values(hist).flat().every(x=>Date.parse(x[0])>=v+3600000-1800000-30*86400000));summary.retention_90_30=true;
