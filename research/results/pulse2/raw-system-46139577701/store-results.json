@@ -1,0 +1,8 @@
+{
+  "virtual_slots": 1488,
+  "concurrent_acquire_attempts": 32,
+  "successful_leases_first_slot": 1,
+  "samples_after_retention": 2882,
+  "latest_revision": 1488,
+  "tests": "passed"
+}

@@ -1,0 +1,10 @@
+{
+  "go": {
+    "cases": 19,
+    "mismatches": {}
+  },
+  "rust": {
+    "cases": 19,
+    "mismatches": {}
+  }
+}

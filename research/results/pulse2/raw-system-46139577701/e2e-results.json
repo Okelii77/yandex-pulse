@@ -1,0 +1,106 @@
+[
+  {
+    "language": "go",
+    "checks": 34,
+    "cycles": [
+      {
+        "checks": 34,
+        "engine_publish_ms": 157.382,
+        "scheduler_to_commit_ms": 160.30429300000293,
+        "scheduler_to_api_ms": 177.41447799999577,
+        "revision": 1
+      },
+      {
+        "checks": 34,
+        "engine_publish_ms": 158.487,
+        "scheduler_to_commit_ms": 161.68120099999328,
+        "scheduler_to_api_ms": 165.3181079999939,
+        "revision": 2
+      },
+      {
+        "checks": 34,
+        "engine_publish_ms": 157.754,
+        "scheduler_to_commit_ms": 160.88399599999548,
+        "scheduler_to_api_ms": 164.5028659999923,
+        "revision": 3
+      },
+      {
+        "checks": 34,
+        "engine_publish_ms": 158.308,
+        "scheduler_to_commit_ms": 161.38631500000145,
+        "scheduler_to_api_ms": 165.8837100000028,
+        "revision": 4
+      },
+      {
+        "checks": 34,
+        "engine_publish_ms": 156.681,
+        "scheduler_to_commit_ms": 159.79058599999973,
+        "scheduler_to_api_ms": 164.5152349999961,
+        "revision": 5
+      }
+    ],
+    "disabled_no_network": [
+      "ai-speech",
+      "ai-vision",
+      "maps-geocoder",
+      "music-ynison"
+    ],
+    "retry_count": 10,
+    "browser": {
+      "cards": 34,
+      "cold_chrome_to_rendered_dom_ms": 10786.979150999998
+    }
+  },
+  {
+    "language": "rust",
+    "checks": 34,
+    "cycles": [
+      {
+        "checks": 34,
+        "engine_publish_ms": 197.799596,
+        "scheduler_to_commit_ms": 223.03304300000093,
+        "scheduler_to_api_ms": 227.21227300000635,
+        "revision": 1
+      },
+      {
+        "checks": 34,
+        "engine_publish_ms": 197.519686,
+        "scheduler_to_commit_ms": 223.1658350000032,
+        "scheduler_to_api_ms": 227.06448200000295,
+        "revision": 2
+      },
+      {
+        "checks": 34,
+        "engine_publish_ms": 198.676299,
+        "scheduler_to_commit_ms": 224.3178290000003,
+        "scheduler_to_api_ms": 228.4110599999991,
+        "revision": 3
+      },
+      {
+        "checks": 34,
+        "engine_publish_ms": 198.492853,
+        "scheduler_to_commit_ms": 224.02945500000726,
+        "scheduler_to_api_ms": 227.96589000000722,
+        "revision": 4
+      },
+      {
+        "checks": 34,
+        "engine_publish_ms": 198.34221499999998,
+        "scheduler_to_commit_ms": 224.42505200000085,
+        "scheduler_to_api_ms": 228.79648299999644,
+        "revision": 5
+      }
+    ],
+    "disabled_no_network": [
+      "ai-speech",
+      "ai-vision",
+      "maps-geocoder",
+      "music-ynison"
+    ],
+    "retry_count": 10,
+    "browser": {
+      "cards": 34,
+      "cold_chrome_to_rendered_dom_ms": 548.1593980000099
+    }
+  }
+]
