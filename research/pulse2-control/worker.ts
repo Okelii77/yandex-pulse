@@ -1,6 +1,6 @@
 // Isolated RC control plane. No production DB or routes modified.
 type DB={prepare(sql:string):any;batch(statements:any[]):Promise<any[]>};
-type Env={DB:DB;RC_LOCAL_ONLY?:string;LOCAL_TOKEN?:string;RC_ENABLE_DISPATCH?:string;RC_GITHUB_TOKEN?:string;RC_ORIGIN?:string};
+type Env={DB:DB;RC_LOCAL_ONLY?:string;LOCAL_TOKEN?:string;RC_ENABLE_DISPATCH?:string;RC_GITHUB_TOKEN?:string;RC_ORIGIN?:string;RC_TURNSTILE_SECRET?:string;RC_TURNSTILE_SITE_KEY?:string;RC_MODE?:string;ASSETS?:{fetch(req:Request):Promise<Response>}};
 const SLOT=1800000,LEASE=600000,DAY=86400000;
 const CATALOG_IDS=new Set(["music-web","music-catalog","music-rest","music-ynison","music-history","music-queues","cloud-web","cloud-console","cloud-storage","cloud-iam","cloud-monitoring","mail-web","mail-imap","mail-smtp","mail-360","disk-web","disk-api","id-passport","id-oauth","wiki-web","wiki-api","maps-web","maps-geocoder","search-web","search-webmaster","ai-studio","ai-models","ai-speech","ai-vision","other-telemost","other-metrika","other-tracker","other-market","other-weather"]);
 const epoch=(now:number)=>Math.floor(now/SLOT)*SLOT;
@@ -77,6 +77,7 @@ async function githubOidcValid(token: string, audience="yandex-pulse-rc-ingest",
        claims.repository!=="Okelii77/yandex-pulse" ||
        String(claims.repository_id)!=="1427282907" ||
        claims.ref!=="refs/heads/research/pulse-architecture-20261128" ||
+       claims.environment!=="pulse-rc" || claims.event_name!=="workflow_dispatch" ||
        claims.workflow_ref!==`Okelii77/yandex-pulse/.github/workflows/${workflow}@refs/heads/research/pulse-architecture-20261128`)
       return false;
     const response=await fetch("https://token.actions.githubusercontent.com/.well-known/jwks",{
@@ -95,12 +96,12 @@ async function githubOidcValid(token: string, audience="yandex-pulse-rc-ingest",
 
 export async function acquire(db:DB,now:number){
  const slot=epoch(now),token=crypto.randomUUID();
- const row=await db.prepare("INSERT INTO rc_lease(slot,token,expires,state) SELECT ?,?,?,'reserved' WHERE NOT EXISTS(SELECT 1 FROM rc_latest WHERE slot>=?) AND NOT EXISTS(SELECT 1 FROM rc_lease WHERE state IN ('reserved','running') AND expires>? AND slot!=?) ON CONFLICT(slot) DO UPDATE SET token=excluded.token,expires=excluded.expires,state='reserved' WHERE rc_lease.state!='done' AND rc_lease.expires<=? RETURNING token").bind(slot,token,now+LEASE,slot,now,slot,now).first();
+ const row=await db.prepare("INSERT INTO rc_lease(slot,token,expires,state) SELECT ?,?,?,'reserved' WHERE NOT EXISTS(SELECT 1 FROM rc_latest WHERE slot>=?) AND NOT EXISTS(SELECT 1 FROM rc_lease WHERE state IN ('reserved','running') AND expires>? AND slot!=?) ON CONFLICT(slot) DO UPDATE SET token=excluded.token,expires=excluded.expires,state='reserved',started_at=NULL,dispatch_ms=NULL,dispatch_at=NULL,finished_at=NULL WHERE rc_lease.state!='done' AND rc_lease.expires<=? RETURNING token").bind(slot,token,now+LEASE,slot,now,slot,now).first();
  return row?{slot,token}:null;
 }
 export async function start(db:DB,claim:{slot:number;token:string},now:number){
  if(!Number.isSafeInteger(claim?.slot)||typeof claim?.token!=="string")return false;
- const r=await db.prepare("UPDATE rc_lease SET state='running',expires=? WHERE slot=? AND token=? AND state='reserved' AND expires>? RETURNING token").bind(now+LEASE,claim.slot,claim.token,now).first();return !!r;
+ const r=await db.prepare("UPDATE rc_lease SET state='running',started_at=?,expires=? WHERE slot=? AND token=? AND state='reserved' AND expires>? RETURNING token").bind(now,now+LEASE,claim.slot,claim.token,now).first();return !!r;
 }
 export async function publish(db:DB,claim:{slot:number;token:string},input:any,now:number){
  const data=safeStatus(input);
@@ -114,7 +115,7 @@ export async function publish(db:DB,claim:{slot:number;token:string},input:any,n
  const b=await db.batch([
  db.prepare("INSERT INTO rc_latest(id,revision,slot,token,generated_at,payload) SELECT 1,1,?,?,?,? WHERE EXISTS(SELECT 1 FROM rc_lease WHERE slot=? AND token=? AND state='running' AND expires>?) ON CONFLICT(id) DO UPDATE SET revision=rc_latest.revision+1,slot=excluded.slot,token=excluded.token,generated_at=excluded.generated_at,payload=excluded.payload WHERE excluded.slot>rc_latest.slot AND excluded.generated_at>rc_latest.generated_at").bind(claim.slot,claim.token,data.generated_at,JSON.stringify(data),claim.slot,claim.token,now),
  db.prepare("INSERT OR IGNORE INTO rc_samples(check_id,checked_at,status,latency_ms) SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]'),json_extract(value,'$[3]') FROM json_each(?) WHERE "+guard).bind(JSON.stringify(measured),...args),
- db.prepare("UPDATE rc_lease SET state='done' WHERE slot=? AND token=? AND "+guard).bind(claim.slot,claim.token,...args),
+ db.prepare("UPDATE rc_lease SET state='done',finished_at=? WHERE slot=? AND token=? AND "+guard).bind(now,claim.slot,claim.token,...args),
  ]);
  return b[0].meta.changes===1;
 }
@@ -151,9 +152,24 @@ export async function history(db:DB,request:Request,now:number,headers:Record<st
 export async function tick(env:Env,now:number,send:typeof fetch=fetch){
  if(env.RC_ENABLE_DISPATCH!=="1"||!env.RC_GITHUB_TOKEN||(env.RC_LOCAL_ONLY==="1"&&send===fetch))return {action:"disabled"};
  const claim=await acquire(env.DB,now);if(!claim)return {action:"skip"};
- try{const r=await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches",{method:"POST",redirect:"error",headers:{Authorization:"Bearer "+env.RC_GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"Pulse-RC","Content-Type":"application/json"},body:JSON.stringify({ref:"research/pulse-architecture-20261128",inputs:{slot:String(claim.slot),lease:claim.token}})});
+ const began=Date.now();await env.DB.prepare("UPDATE rc_lease SET dispatch_at=? WHERE slot=? AND token=?").bind(now,claim.slot,claim.token).run();
+ try{const r=await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches",{method:"POST",redirect:"error",signal:AbortSignal.timeout(10000),headers:{Authorization:"Bearer "+env.RC_GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"Pulse-RC","Content-Type":"application/json"},body:JSON.stringify({ref:"research/pulse-architecture-20261128",inputs:{slot:String(claim.slot),lease:claim.token}})});
+ await env.DB.prepare("UPDATE rc_lease SET dispatch_ms=? WHERE slot=? AND token=?").bind(Date.now()-began,claim.slot,claim.token).run();
  return {action:r.ok?"accepted":"uncertain_wait_for_expiry",slot:claim.slot};
  }catch{return {action:"uncertain_wait_for_expiry",slot:claim.slot};}
+}
+export async function manualTrigger(request:Request,env:Env,now:number,send:typeof fetch=fetch){
+ if(!env.RC_ORIGIN||request.headers.get("Origin")!==env.RC_ORIGIN)return response({error:"forbidden_origin"},403);
+ if(env.RC_ENABLE_DISPATCH!=="1"||!env.RC_GITHUB_TOKEN||!env.RC_TURNSTILE_SECRET||!env.RC_TURNSTILE_SITE_KEY)return response({error:"trigger_not_configured"},503);
+ let body:any;try{const raw=await request.text();if(raw.length>4096)return response({error:"too_large"},413);body=JSON.parse(raw);}catch{return response({error:"invalid_json"},400);}
+ if(typeof body?.turnstileToken!=="string"||!body.turnstileToken||body.turnstileToken.length>2048)return response({error:"turnstile_failed"},403);
+ const verified=await send("https://challenges.cloudflare.com/turnstile/v0/siteverify",{method:"POST",redirect:"error",signal:AbortSignal.timeout(8000),body:new URLSearchParams({secret:env.RC_TURNSTILE_SECRET,response:body.turnstileToken})});
+ if(!verified.ok)return response({error:"turnstile_unavailable"},503);
+ const v:any=await verified.json();if(v.success!==true||v.hostname!==new URL(env.RC_ORIGIN).hostname)return response({error:"turnstile_failed"},403);
+ const row=await env.DB.prepare("INSERT INTO rc_manual_gate(id,last_at) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET last_at=excluded.last_at WHERE rc_manual_gate.last_at<=? RETURNING last_at").bind(now,now-600000).first();
+ if(!row)return response({error:"cooldown",retry_after_seconds:600},429);
+ const result=await tick(env,now,send);
+ return result.action==="accepted"?response({ok:true,started_at:iso(now)},202):result.action==="skip"?response({error:"slot_busy_or_completed",retry_after_seconds:Math.ceil((epoch(now)+SLOT-now)/1000)},429):response({error:"github_unavailable",dispatch_uncertain:true},502);
 }
 async function authorized(req:Request,env:Env){const token=req.headers.get("Authorization")||"";return env.RC_LOCAL_ONLY==="1"?!!env.LOCAL_TOKEN&&token==="Bearer "+env.LOCAL_TOKEN:token.startsWith("Bearer ")&&await githubOidcValid(token.slice(7));}
 export default {
@@ -162,15 +178,21 @@ export default {
  const now=Date.now(),url=new URL(req.url),path=url.pathname;const cors:Record<string,string>=req.headers.get("Origin")===env.RC_ORIGIN&&env.RC_ORIGIN?{"Access-Control-Allow-Origin":env.RC_ORIGIN,"Access-Control-Allow-Headers":"Content-Type, If-None-Match","Access-Control-Allow-Methods":"GET, OPTIONS","Access-Control-Expose-Headers":"ETag, Retry-After","Vary":"Origin"}:{};
  try{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors});
- if(req.method==="GET"&&path==="/api/health"){const row=await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();const lease=await env.DB.prepare("SELECT slot,state,expires FROM rc_lease ORDER BY slot DESC LIMIT 1").first();return response({ok:true,version:"2.0.0-rc.1",trigger_ready:false,last_observation:row?.generated_at||null,stale:!row||now-Date.parse(row.generated_at)>90*60000,last_slot:row?.slot||null,lease:lease?{slot:lease.slot,state:lease.state,expires:iso(lease.expires)}:null},200,cors);}
- if(req.method==="GET"&&path==="/api/status"){const row=await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();if(!row)return response({error:"waiting"},503,cors);const tag='"s-'+row.revision+'"';return req.headers.get("If-None-Match")===tag?response(null,304,{...cors,ETag:tag}):response(JSON.parse(row.payload),200,{...cors,ETag:tag});}
+ if(req.method==="GET"&&path==="/api/health"){const row=await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();const lease=await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();return response({ok:true,version:"2.0.0-rc.2",environment:"staging",mode:env.RC_MODE||"synthetic",trigger_ready:!!(env.RC_ENABLE_DISPATCH==="1"&&env.RC_GITHUB_TOKEN&&env.RC_TURNSTILE_SECRET&&env.RC_TURNSTILE_SITE_KEY),last_observation:row?.generated_at||null,stale:!row||now-Date.parse(row.generated_at)>90*60000,last_slot:row?.slot||null,lease:lease?{slot:lease.slot,state:lease.state,expires:iso(lease.expires),dispatch_ms:lease.dispatch_ms,runner_wait_ms:lease.started_at&&lease.dispatch_at?Math.max(0,lease.started_at-lease.dispatch_at):null,started_at:lease.started_at?iso(lease.started_at):null,finished_at:lease.finished_at?iso(lease.finished_at):null}:null},200,cors);}
+ if(req.method==="GET"&&path==="/api/status"){const row=await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();if(!row)return response({error:"waiting"},503,cors);const tag='"s-'+row.revision+'"';return req.headers.get("If-None-Match")===tag?response(null,304,{...cors,ETag:tag}):response({...JSON.parse(row.payload),environment:"staging",data_mode:env.RC_MODE||"synthetic"},200,{...cors,ETag:tag});}
  if(req.method==="GET"&&path==="/api/history")return await history(env.DB,req,now,cors);
+ if(req.method==="POST"&&path==="/api/trigger"){const result=await manualTrigger(req,env,now);return new Response(result.body,{status:result.status,headers:{...Object.fromEntries(result.headers.entries()),...cors}});}
+ if(req.method==="GET"&&path==="/api/ynison/status")return response({schema:1,automatic:false,last_diagnostic:null,retry_after_at:null,available:false,reason:"shared_gate_not_authorized_for_staging"},200,cors);
+ if(req.method==="POST"&&["/api/ynison/acquire","/api/ynison/finish"].includes(path))return response({error:"shared_gate_not_authorized_for_staging"},403,cors);
  if(req.method==="POST"&&(path==="/api/rc/acquire"||path==="/api/rc/start"||path==="/api/rc/ingest")){
  if(!await authorized(req,env))return response({error:"unauthorized"},401,cors);
+ if(env.RC_LOCAL_ONLY!=="1"&&env.RC_ENABLE_DISPATCH!=="1")return response({error:"staging_disabled"},503,cors);
  if(path.endsWith("acquire")){const claim=await acquire(env.DB,now);return response(claim||{error:"busy"},claim?200:409,cors);}
+ if(Number(req.headers.get("Content-Length")||0)>100000)return response({error:"too_large"},413,cors);
  const raw=await req.text();if(new TextEncoder().encode(raw).length>100000)return response({error:"too_large"},413,cors);
  const data=JSON.parse(raw);if(path.endsWith("/start")){const ok=await start(env.DB,data.claim,now);return response({ok},ok?200:409,cors);}const ok=await publish(env.DB,data.claim,data.payload,now);return response({ok},ok?200:409,cors);}
- // Never expose or replace the existing production Ynison gate here.
+ if(req.method==="GET"&&path==="/api-config.js")return new Response("window.PULSE_API_CONFIG="+JSON.stringify({apiUrl:url.origin,turnstileSiteKey:env.RC_TURNSTILE_SITE_KEY||"",staging:true})+";",{headers:{"Content-Type":"application/javascript","Cache-Control":"no-store"}});
+ if(req.method==="GET"&&!path.startsWith("/api/")&&env.ASSETS)return env.ASSETS.fetch(req);
  return response({error:"not_found"},404,cors);
  }catch{return response({error:"invalid_or_unavailable"},500,cors);}
  }

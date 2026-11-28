@@ -5,12 +5,13 @@ import json,os,pathlib,subprocess,sys,urllib.request,urllib.error
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'research/pulse2-rc'))
 from compose import compose,legacy_adapters
+import datetime as dt,time
 def main():
  if os.environ.get('PULSE_RC_STAGE_APPROVED')!='1':raise RuntimeError('staging not approved')
  base=os.environ['PULSE_RC_API_URL'].rstrip('/')
  from urllib.parse import urlsplit
  u=urlsplit(base)
- if u.scheme!='https' or not u.hostname or u.username or u.password or u.path or u.query or u.fragment or u.hostname=='yandex-pulse-api.oleg-pulse-03.workers.dev':raise RuntimeError('separate RC endpoint required')
+ if u.scheme!='https' or not u.hostname or u.username or u.password or u.path or u.query or u.fragment or not u.hostname.startswith('yandex-pulse-rc2.') or not u.hostname.endswith('.workers.dev'):raise RuntimeError('separate RC endpoint required')
  class NoRedirect(urllib.request.HTTPRedirectHandler):
   def redirect_request(self,*args,**kwargs):return None
  opener=urllib.request.build_opener(NoRedirect)
@@ -34,11 +35,19 @@ def main():
  except urllib.error.HTTPError as e:
   if e.code!=503:raise
   previous={}
- native=json.loads(subprocess.check_output([str(ROOT/'research/pulse2-rc/target/release/pulse-core-rc'),'public',str(catalog_path)],timeout=150,env={'PULSE_RC_APPROVED_PUBLIC':'1'}))
- rows=legacy_adapters(catalog,previous,approved=True)
- data=compose(catalog,native,rows)
+ began=time.monotonic()
+ if os.environ.get('PULSE_RC_REAL_APPROVED')=='1':
+  # Only separately named staging credentials are mapped by protected workflow.
+  native=json.loads(subprocess.check_output([str(ROOT/'research/pulse2-rc/target/release/pulse-core-rc'),'public',str(catalog_path)],timeout=150,env={'PULSE_RC_APPROVED_PUBLIC':'1'}))
+  rows=legacy_adapters(catalog,previous,approved=True)
+  data=compose(catalog,native,rows)
+ else:
+  stamp=dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds').replace('+00:00','Z')
+  data=dict(catalog,generated_at=stamp,results=[dict(id=c['id'],status='disabled' if c['kind']=='music_ynison' or c['id'] in ('maps-geocoder','ai-speech','ai-vision') else 'not_configured',checked_at=stamp,latency_ms=None,reason='staging synthetic schedule only') for c in catalog['checks']])
+ print('RC core_ms',round((time.monotonic()-began)*1000))
+ upload=time.monotonic()
  if call('/api/rc/ingest',{'claim':claim,'payload':data},True).get('ok') is not True:raise RuntimeError('ingest rejected')
- print('RC snapshot accepted, 34 components')
+ print('RC snapshot accepted, 34 components; upload_ms',round((time.monotonic()-upload)*1000))
 if __name__=='__main__':
  try:main()
  except Exception as e:

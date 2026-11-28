@@ -1,0 +1,4 @@
+staging-assets/
+wrangler.rc2.generated.json
+node_modules/
+dist/
