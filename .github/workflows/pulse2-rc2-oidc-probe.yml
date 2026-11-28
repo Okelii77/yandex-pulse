@@ -1,0 +1,33 @@
+name: RC2 one-shot cloud OIDC runtime probe
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-rc2-oidc-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Invoke one armed server-side JWKS probe (no credentials)
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          opener=urllib.request.build_opener(NoRedirect)
+          base="https://yandex-pulse-rc2.oleg-pulse-03.workers.dev"
+          headers={"User-Agent":"YandexPulse-RC2-Smoke/2.0"}
+          with opener.open(urllib.request.Request(base+"/api/health",headers=headers),timeout=20) as r:
+              h=json.load(r)
+              assert h["build"]=="rc2-oidc-diagnostic-1" and h["environment"]=="staging" and h["mode"]=="synthetic"
+              print("RC2 diagnostic build verified")
+          try:
+              opener.open(urllib.request.Request(base+"/api/rc/oidc-probe",method="POST",data=b"{}",headers=headers),timeout=30)
+              raise AssertionError("unexpected success")
+          except urllib.error.HTTPError as e:
+              assert e.code==404,(e.code,)
+              assert json.load(e)=={"error":"not_found"}
+              print("RC2 private probe invoked; generic public 404")
+          PY
