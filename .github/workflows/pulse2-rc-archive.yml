@@ -1,0 +1,35 @@
+name: Archive RC evidence (offline)
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-rc-archive.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  archive:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pulse2-rc-evidence
+          run-id: 46146243209
+          github-token: ${{ github.token }}
+          path: /tmp/pulse2-rc-evidence
+      - run: |
+          set -eu
+          test "${GITHUB_REF}" = refs/heads/research/pulse-architecture-20261128
+          lock="$(find /tmp/pulse2-rc-evidence -type f -name Cargo.lock -print -quit)"
+          test -n "$lock"
+          cp "$lock" research/pulse2-rc/Cargo.lock
+          mkdir -p research/results/pulse2/rc-final-artifacts
+          cp -r /tmp/pulse2-rc-evidence/. research/results/pulse2/rc-final-artifacts/
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add research/pulse2-rc/Cargo.lock research/results/pulse2/rc-final-artifacts
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "RC: archive successful integrated evidence and dependency lock"
+          git push origin HEAD:refs/heads/research/pulse-architecture-20261128

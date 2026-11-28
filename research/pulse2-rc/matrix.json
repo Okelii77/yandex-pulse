@@ -4,10 +4,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -15,10 +15,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -26,10 +26,10 @@
     "kind": "music_rest",
     "current": "monitor/check.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Rust read-only fixture adapter passed five scenarios (46146243209)",
+    "local": "Passed local API fixtures; RC production-capable compose retains Python SDK",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "No real token/API comparison; native adapter is loopback-only",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -37,21 +37,21 @@
     "kind": "music_ynison",
     "current": "protected JS Wire / Python manual diagnostic",
     "candidate": "unchanged production gate + JS Wire",
-    "contract": "existing gate tests; no new live connection",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "manual only; native replacement not approved",
-    "rollback": "retain production 1.0 path"
+    "contract": "Existing gate/JS Wire regression suite passed; previous native loopback protocol tests",
+    "local": "Synthetic status only in RC snapshot; no live connection",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "Native not enabled; existing gate permits python/javascript, not rust; RC worker does not implement manual diagnostic endpoints",
+    "rollback": "Keep existing authoritative gate, JS Wire and cooldown state; never reset cooldown"
   },
   {
     "id": "music-history",
     "kind": "music_history",
     "current": "monitor/check.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Rust read-only fixture adapter passed five scenarios (46146243209)",
+    "local": "Passed local API fixtures; RC production-capable compose retains Python SDK",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "No real token/API comparison; native adapter is loopback-only",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -59,10 +59,10 @@
     "kind": "music_queues",
     "current": "monitor/check.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Rust read-only fixture adapter passed five scenarios (46146243209)",
+    "local": "Passed local API fixtures; RC production-capable compose retains Python SDK",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "No real token/API comparison; native adapter is loopback-only",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -70,10 +70,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -81,10 +81,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -92,10 +92,10 @@
     "kind": "http_gateway",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -103,10 +103,10 @@
     "kind": "requires_key",
     "current": "monitor/auth_checks.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "real SDK/credentials or paid opt-in needed; no RC paid calls",
+    "contract": "Existing Python regression suite passed collectively; no individual native parity claim",
+    "local": "Synthetic snapshot passed; retained adapter not invoked against external API",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "Requires approved credentials and read-only differential test; no native replacement",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -114,10 +114,10 @@
     "kind": "requires_key",
     "current": "monitor/auth_checks.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "real SDK/credentials or paid opt-in needed; no RC paid calls",
+    "contract": "Existing Python regression suite passed collectively; no individual native parity claim",
+    "local": "Synthetic snapshot passed; retained adapter not invoked against external API",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "Requires approved credentials and read-only differential test; no native replacement",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -125,10 +125,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -136,10 +136,10 @@
     "kind": "tcp_tls",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "TLS handshake only; no mailbox login or sending",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "TLS handshake only; no mailbox login or sending; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -147,10 +147,10 @@
     "kind": "tcp_tls",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "TLS handshake only; no mailbox login or sending",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "TLS handshake only; no mailbox login or sending; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -158,10 +158,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -169,10 +169,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -180,10 +180,10 @@
     "kind": "requires_key",
     "current": "monitor/auth_checks.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "real SDK/credentials or paid opt-in needed; no RC paid calls",
+    "contract": "Existing Python regression suite passed collectively; no individual native parity claim",
+    "local": "Synthetic snapshot passed; retained adapter not invoked against external API",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "Requires approved credentials and read-only differential test; no native replacement",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -191,10 +191,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -202,10 +202,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -213,10 +213,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -224,10 +224,10 @@
     "kind": "requires_key",
     "current": "monitor/auth_checks.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "real SDK/credentials or paid opt-in needed; no RC paid calls",
+    "contract": "Existing Python regression suite passed collectively; no individual native parity claim",
+    "local": "Synthetic snapshot passed; retained adapter not invoked against external API",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "Requires approved credentials and read-only differential test; no native replacement",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -235,10 +235,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -246,10 +246,10 @@
     "kind": "requires_key",
     "current": "monitor/auth_checks.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "real SDK/credentials or paid opt-in needed; no RC paid calls",
+    "contract": "Existing Python regression suite passed collectively; no individual native parity claim",
+    "local": "Synthetic snapshot passed; retained adapter not invoked against external API",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "Potentially paid check kept disabled in RC; no paid calls approved",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -257,10 +257,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -268,10 +268,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -279,10 +279,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -290,10 +290,10 @@
     "kind": "requires_key",
     "current": "monitor/auth_checks.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "real SDK/credentials or paid opt-in needed; no RC paid calls",
+    "contract": "Existing Python regression suite passed collectively; no individual native parity claim",
+    "local": "Synthetic snapshot passed; retained adapter not invoked against external API",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "Requires approved credentials and read-only differential test; no native replacement",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -301,10 +301,10 @@
     "kind": "requires_key",
     "current": "monitor/auth_checks.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "real SDK/credentials or paid opt-in needed; no RC paid calls",
+    "contract": "Existing Python regression suite passed collectively; no individual native parity claim",
+    "local": "Synthetic snapshot passed; retained adapter not invoked against external API",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "Potentially paid check kept disabled in RC; no paid calls approved",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -312,10 +312,10 @@
     "kind": "requires_key",
     "current": "monitor/auth_checks.py",
     "candidate": "unchanged Python adapter",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "real SDK/credentials or paid opt-in needed; no RC paid calls",
+    "contract": "Existing Python regression suite passed collectively; no individual native parity claim",
+    "local": "Synthetic snapshot passed; retained adapter not invoked against external API",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "Potentially paid check kept disabled in RC; no paid calls approved",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -323,10 +323,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -334,10 +334,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -345,10 +345,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -356,10 +356,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   },
   {
@@ -367,10 +367,10 @@
     "kind": "http",
     "current": "monitor/check.py",
     "candidate": "Rust native public stage; Go fixture alternative",
-    "contract": "pending RC integration CI",
-    "local": "pending RC integration CI",
-    "live": "not executed in RC",
-    "limits": "mock cannot prove production reachability",
+    "contract": "Passed 30 Rust + 30 Go cycles, 22 public checks (46146243209)",
+    "local": "Passed synthetic public checks and D1/browser ingestion, 34 rows",
+    "live": "RC live not executed; production aggregate logs cannot establish per-component parity",
+    "limits": "mock cannot prove production reachability; real DNS, TLS and redirect parity not established",
     "rollback": "retain production 1.0 path"
   }
 ]

@@ -1,0 +1,13 @@
+{
+  "virtual_slots": 1489,
+  "publications": 1489,
+  "sample_rows": 44670,
+  "lease_contenders": 32,
+  "start_contenders": 16,
+  "history_contenders": 12,
+  "dispatches": 1,
+  "publish_p50_ms": 18.333740999998554,
+  "publish_p95_ms": 21.429037000000335,
+  "history_revision": "1489-1795870800000",
+  "passed": true
+}
