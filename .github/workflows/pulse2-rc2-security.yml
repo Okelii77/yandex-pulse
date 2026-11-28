@@ -14,12 +14,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: pulse2-rc-evidence
-          run-id: 46148309969
-          github-token: ${{ github.token }}
-          path: /tmp/rc2-lock
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22.23.5'
@@ -29,10 +23,11 @@ jobs:
       - name: Resolve isolated dependency locks and audit
         working-directory: research/pulse2-control
         run: |
-          cp "$(find /tmp/rc2-lock -name Cargo.lock -print -quit)" ../pulse2-rc/Cargo.lock
+          rustup toolchain install 1.100.1 --profile minimal
+          cargo +1.100.1 generate-lockfile --manifest-path ../pulse2-rc/Cargo.toml
           python -m venv /tmp/rc-audit
           /tmp/rc-audit/bin/pip install 'pip-tools==7.5.2'
-          /tmp/rc-audit/bin/pip-compile --generate-hashes --output-file requirements.lock ../../monitor/requirements.txt
+          /tmp/rc-audit/bin/pip-compile --generate-hashes --output-file requirements.lock requirements.in
           python -m venv /tmp/rc-adapters
           /tmp/rc-adapters/bin/pip install --require-hashes -r requirements.lock
           /tmp/rc-adapters/bin/pip freeze > python-resolved.txt
