@@ -36,7 +36,7 @@ const summary={};try{await mf.ready;const db=await mf.getD1Database('DB');for(co
   ['http',async()=>new Response('',{status:503}),'jwks_http_rejected'],
   ['json',async()=>new Response('invalid json'),'jwks_json_exception'],
   ['kid',async()=>Response.json({keys:[]}), 'jwks_key_missing'],
-  ['import',async()=>Response.json({keys:[{...jwk,n:''}]}),'rsa_import_exception'],
+  ['import',async()=>Response.json({keys:[{...jwk,key_ops:['sign'],alg:'RS512'}]}),'rsa_import_exception'],
  ]){
   const trace=[];assert.equal(await githubOidcIdentity(await sign(claims),ts*1000,loader,(code,status)=>trace.push({code,status})),null);assert.equal(trace.at(-1).code,expected,name);traceCases.push(name);
  }
