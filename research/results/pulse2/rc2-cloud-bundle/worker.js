@@ -95,10 +95,10 @@ export async function githubOidcIdentity(token, now = Date.now(), load = fetch, 
         trace("claims_ok");
         stage = "jwks_fetch";
         const response = await load("https://token.actions.githubusercontent.com/.well-known/jwks", {
-            cache: 'no-store', redirect: "error", signal: AbortSignal.timeout(5000)
+            redirect: "manual", signal: AbortSignal.timeout(5000), headers: { "Cache-Control": "no-cache", "Accept": "application/json", "User-Agent": "YandexPulse-Scheduler/2.0" }
         });
         trace("jwks_http", response.status);
-        if (!response.ok)
+        if (response.status !== 200)
             return deny("jwks_http_rejected");
         stage = "jwks_json";
         const jwks = await response.json();
@@ -122,7 +122,7 @@ export async function githubOidcIdentity(token, now = Date.now(), load = fetch, 
     }
 }
 // Private, bounded diagnostic evidence; no raw claims, kid, JWT, URL or headers.
-const OIDC_DIAG_VERSION = "rc2-oidc-diagnostic-2";
+const OIDC_DIAG_VERSION = "rc2-oidc-jwks-manual-1";
 async function auditOidc(db, now, ray, steps) {
     try {
         if (!await reserveBudget(db, now, 0, 0, 80, 4))
@@ -132,77 +132,6 @@ async function auditOidc(db, now, ray, steps) {
     }
     catch {
         console.warn("RC2_OIDC_DIAG_STORE_FAILED");
-    }
-}
-async function probeRuntime(db, now) {
-    // The sole row must be explicitly armed by the account operator. No public result.
-    const claim = await db.prepare("UPDATE rc_oidc_probe SET state='running' WHERE id=1 AND state='armed' AND expires>? RETURNING id").bind(now).first();
-    if (!claim)
-        return;
-    const out = { version: OIDC_DIAG_VERSION, timeout_available: typeof AbortSignal.timeout === "function", crypto_available: !!crypto.subtle, checks: [] };
-    try {
-        for (const mode of ["minimal", "redirect_error", "signal_only", "original", "explicit_headers"]) {
-            const row = { mode };
-            out.checks.push(row);
-            let stage = "fetch";
-            try {
-                const init = { redirect: "manual" };
-                if (mode === "redirect_error")
-                    init.redirect = "error";
-                if (["signal_only", "original", "explicit_headers"].includes(mode))
-                    init.signal = AbortSignal.timeout(5000);
-                if (mode === "original") {
-                    init.redirect = "error";
-                    init.cache = "no-store";
-                }
-                if (mode === "explicit_headers") {
-                    init.redirect = "error";
-                    init.headers = { "Cache-Control": "no-cache", "User-Agent": "YandexPulse-Scheduler/2.0", "Accept": "application/json" };
-                }
-                const r = await fetch("https://token.actions.githubusercontent.com/.well-known/jwks", init);
-                row.http = r.status;
-                if (!r.ok)
-                    continue;
-                stage = "json";
-                const jwks = await r.json();
-                row.keys = Array.isArray(jwks.keys) ? jwks.keys.length : 0;
-                row.rsa_sig = 0;
-                row.rsa_without_use = 0;
-                row.import_ok = 0;
-                row.verify_false = 0;
-                for (const k of (Array.isArray(jwks.keys) ? jwks.keys : []).slice(0, 16)) {
-                    if (k.kty !== "RSA")
-                        continue;
-                    if (k.use === "sig")
-                        row.rsa_sig++;
-                    else if (k.use === undefined)
-                        row.rsa_without_use++;
-                    else
-                        continue;
-                    stage = "import";
-                    const key = await crypto.subtle.importKey("jwk", k, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
-                    row.import_ok++;
-                    stage = "verify";
-                    const bits = key.algorithm.modulusLength;
-                    if (!await crypto.subtle.verify({ name: "RSASSA-PKCS1-v1_5" }, key, new Uint8Array(bits / 8), new Uint8Array([1, 2, 3])))
-                        row.verify_false++;
-                }
-                row.done = true;
-            }
-            catch (e) {
-                row.failure = stage;
-                const message = e instanceof Error ? e.message : "";
-                const patterns = [["unsupported_cache", /unsupported cache mode|cache.*unsupported/i], ["illegal_invocation", /illegal invocation|incompatible receiver/i], ["request_context", /different request|I\/O objects|asynchronous I\/O/i], ["network", /network connection lost|network error|fetch failed|connection reset|connection refused|connection closed/i], ["dns", /DNS|resolve host|name resolution/i], ["tls", /TLS|SSL|certificate/i], ["redirect", /redirect/i], ["signal", /AbortSignal|signal|aborted|timeout/i], ["policy", /not allowed|blocked|denied|disallowed|restricted|prohibited/i], ["fetch_implementation", /not implemented|not supported/i]];
-                row.message_category = patterns.find((x) => x[1].test(message))?.[0] || "unclassified";
-                // Fixed public endpoint, no credentials. Only exact, known runtime messages may be retained.
-                if (["fetch failed", "Network connection lost.", "Illegal invocation", "The operation was aborted.", "Unsupported cache mode: no-store", "Network connection lost", "Failed to fetch", "The operation timed out."].includes(message))
-                    row.known_message = message;
-                row.kind = e instanceof TypeError ? "TypeError" : e instanceof DOMException ? e.name === "AbortError" ? "AbortError" : e.name === "TimeoutError" ? "TimeoutError" : "DOMException" : "Other";
-            }
-        }
-    }
-    finally {
-        await db.prepare("UPDATE rc_oidc_probe SET state='done',result=? WHERE id=1 AND state='running'").bind(JSON.stringify(out)).run();
     }
 }
 // Conservative application reservations, not account-wide billing counters.
@@ -406,11 +335,6 @@ export default {
                 return new Response(null, { status: 204, headers: cors });
             if (path.startsWith("/api/") && !await reserveBudget(env.DB, now, 1, 0, 32, 2))
                 return response({ error: "staging_budget_exhausted" }, 429, { ...cors, "Retry-After": "3600" });
-            if (req.method === "POST" && path === "/api/rc/oidc-probe") {
-                if (await reserveBudget(env.DB, now, 0, 0, 128, 8))
-                    await probeRuntime(env.DB, now);
-                return response({ error: "not_found" }, 404, cors);
-            }
             if (req.method === "GET" && path === "/api/health") {
                 const row = await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();
                 const lease = await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();
