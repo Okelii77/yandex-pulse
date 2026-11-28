@@ -1,20 +1,29 @@
-import subprocess as sp, pathlib, time, json, random, statistics, sys, os, tempfile, argparse, math
+import subprocess as sp, pathlib, time, json, random, statistics, sys, os, tempfile, argparse, math, threading
 p=argparse.ArgumentParser();p.add_argument('--repeats',type=int,default=100);p.add_argument('--rust',action='store_true');p.add_argument('--delays',nargs='+',type=int,default=[0,30]);a=p.parse_args()
 base=pathlib.Path(__file__).resolve().parent;os.chdir(base)
 cmds={'python-baseline':[sys.executable,'-S','bench.py','baseline'],'python-optimized':[sys.executable,'-S','bench.py','optimized'],'go':['./bench-go'],'node':['node','bench.mjs']}
 if a.rust:cmds['rust']=['./target/release/pulse-bench']
 server=sp.Popen(['./mock']);rows=[];rng=random.Random(42)
 def one(name,d):
- with tempfile.NamedTemporaryFile() as t:
+ with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
   start=time.perf_counter()
-  try:r=sp.run(['/usr/bin/time','-f','%U %S %M','-o',t.name,*cmds[name],str(d)],capture_output=True,text=True,timeout=25)
-  except sp.TimeoutExpired:return dict(error='timeout',wall_ms=(time.perf_counter()-start)*1000)
+  proc=sp.Popen([*cmds[name],str(d)],stdout=output,stderr=errors)
+  timed_out=threading.Event()
+  def kill():
+   timed_out.set()
+   try:proc.kill()
+   except ProcessLookupError:pass
+  timer=threading.Timer(25,kill);timer.start()
+  try:
+   _,status,usage=os.wait4(proc.pid,0)
+   proc.returncode=os.waitstatus_to_exitcode(status)
+  finally:timer.cancel();timer.join()
   wall=(time.perf_counter()-start)*1000
-  if r.returncode:return dict(error='nonzero_exit',wall_ms=wall)
-  t.seek(0);u,s,rss=map(float,t.read().split());data=json.loads(r.stdout)
+  if proc.returncode or timed_out.is_set():return dict(error='timeout' if timed_out.is_set() else 'nonzero_exit',wall_ms=wall)
+  output.seek(0);data=json.load(output)
   expected=27 if name=='python-baseline' else 25
   assert data['requests']==expected
-  return dict(ms=data['ms'],requests=data['requests'],cpu_ms=(u+s)*1000,rss_kib=rss,wall_ms=wall)
+  return dict(ms=data['ms'],requests=data['requests'],cpu_ms=(usage.ru_utime+usage.ru_stime)*1000,rss_kib=usage.ru_maxrss,wall_ms=wall)
 try:
  time.sleep(.3)
  if server.poll() is not None:raise RuntimeError('mock failed to start')

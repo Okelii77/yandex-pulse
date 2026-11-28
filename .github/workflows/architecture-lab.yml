@@ -46,6 +46,7 @@ jobs:
           cargo test --locked --release
           go build -o core-go core.go
           python parity.py
+          python ynison_ws_test.py
           python history_stage2.py
           node --test scheduler.test.mjs
       - name: Randomized process-level benchmark (100 repetitions)
@@ -68,4 +69,5 @@ jobs:
             research/architecture-lab/stage2-results.jsonl
             research/architecture-lab/stage2-summary.json
             research/architecture-lab/parity-results.json
+            research/architecture-lab/ynison-ws-results.json
             research/architecture-lab/history-stage2-results.json

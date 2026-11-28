@@ -1,10 +1,13 @@
 """Only loopback. Public HTTP/TLS parity; authenticated SDKs explicitly not replaced."""
 import http.server as h, threading, ssl, subprocess as sp, tempfile, pathlib,json,time,socket
 root=pathlib.Path(__file__).parent
+class Server(h.ThreadingHTTPServer):
+ request_queue_size=128
+ daemon_threads=True
 class Handler(h.BaseHTTPRequestHandler):
  def log_message(self,*args):pass
  def do_GET(self):
-  if self.path=='/slow':time.sleep(1.4)
+  if self.path=='/slow':time.sleep(3.0)
   if self.path=='/redirect':self.send_response(302);self.send_header('Location','/200');self.end_headers();return
   if self.path=='/unsafe':self.send_response(302);self.send_header('Location','https://example.invalid/');self.end_headers();return
   code=int(self.path[1:]) if self.path[1:].isdigit() else 200
@@ -12,8 +15,14 @@ class Handler(h.BaseHTTPRequestHandler):
   try:self.wfile.write(b'{}')
   except OSError:pass
 with tempfile.TemporaryDirectory() as d:
- p=pathlib.Path(d);sp.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(p/'key'),' -out'.strip(),str(p/'cert'),'-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1'],check=True,capture_output=True)
- servers=[h.ThreadingHTTPServer(('127.0.0.1',0),Handler) for _ in range(2)];ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);ctx.load_cert_chain(p/'cert',p/'key');servers[1].socket=ctx.wrap_socket(servers[1].socket,server_side=True)
+ p=pathlib.Path(d)
+ def openssl(*args):sp.run(['openssl',*args],check=True,capture_output=True)
+ openssl('req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(p/'ca.key'),'-out',str(p/'ca.pem'),'-days','1','-subj','/CN=Pulse test CA','-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign')
+ openssl('req','-new','-newkey','rsa:2048','-nodes','-keyout',str(p/'key'),'-out',str(p/'csr'),'-subj','/CN=localhost')
+ (p/'ext').write_text('basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1\n')
+ openssl('x509','-req','-in',str(p/'csr'),'-CA',str(p/'ca.pem'),'-CAkey',str(p/'ca.key'),'-CAcreateserial','-out',str(p/'cert'),'-days','1','-extfile',str(p/'ext'))
+ openssl('verify','-CAfile',str(p/'ca.pem'),str(p/'cert'))
+ servers=[Server(('127.0.0.1',0),Handler) for _ in range(2)];ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);ctx.load_cert_chain(p/'cert',p/'key');servers[1].socket=ctx.wrap_socket(servers[1].socket,server_side=True)
  for s in servers:threading.Thread(target=s.serve_forever,daemon=True).start()
  hp,ts=[s.server_port for s in servers]
  cases=[];expected={}
@@ -26,7 +35,7 @@ with tempfile.TemporaryDirectory() as d:
  add('bad-tls','tcp_tls','down',host='localhost',port=hp)
  add('ynison','music_ynison','disabled')
  for k in ['music_rest','music_history','music_queues','requires_key']:add(k,k,'unsupported')
- f=p/'spec.json';f.write_text(json.dumps(dict(checks=cases,ca=(p/'cert').read_text())))
+ f=p/'spec.json';f.write_text(json.dumps(dict(checks=cases,ca=(p/'ca.pem').read_text())))
  reports={}
  for name,cmd in [('go','./core-go'),('rust','./target/release/pulse-core')]:
   r=json.loads(sp.check_output([cmd,str(f)],cwd=root,timeout=30))
