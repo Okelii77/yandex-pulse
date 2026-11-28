@@ -1,0 +1,29 @@
+{
+  "measurement": "workflow created_at to Synthetic checks job started_at; not API request to runner",
+  "samples": [
+    {
+      "id": 45620964675,
+      "seconds": 4
+    },
+    {
+      "id": 45199761948,
+      "seconds": 4
+    },
+    {
+      "id": 40213595908,
+      "seconds": 3
+    },
+    {
+      "id": 40212430241,
+      "seconds": 3
+    },
+    {
+      "id": 40211232829,
+      "seconds": 4
+    },
+    {
+      "id": 39963401357,
+      "seconds": 4
+    }
+  ]
+}
