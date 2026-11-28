@@ -1,0 +1,71 @@
+name: Architecture Lab (offline)
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['research/architecture-lab/**', '.github/workflows/architecture-lab.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: architecture-lab-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  experiment:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: research/architecture-lab
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.2'
+          cache: false
+      - name: Record environment and build
+        run: |
+          set -e
+          rustup default stable
+          { uname -a; lscpu; python --version; node --version; go version; rustc --version; cargo --version; } > environment.txt
+          /usr/bin/time -o build-times.txt -f 'mock %e %U %S %M' go build -o mock mock.go
+          /usr/bin/time -a -o build-times.txt -f 'go %e %U %S %M' go build -o bench-go bench.go
+          cargo generate-lockfile
+          /usr/bin/time -a -o build-times.txt -f 'rust %e %U %S %M' cargo build --locked --release --bins
+          wc -c bench-go target/release/pulse-bench bench.py bench.mjs > sizes.txt
+      - name: Protocol and synthetic parity tests
+        run: |
+          cargo test --locked --release
+          go build -o core-go core.go
+          python parity.py
+          python history_stage2.py
+          node --test scheduler.test.mjs
+      - name: Randomized process-level benchmark (100 repetitions)
+        run: |
+          python run2.py --rust --repeats 100 --delays 0 30
+          python -c 'import json; assert all(r["attempts"]==100 and r["errors"]==0 for r in json.load(open("stage2-summary.json")))'
+          cat stage2-summary.json
+      - name: Upload sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-lab-evidence
+          retention-days: 1
+          if-no-files-found: warn
+          path: |
+            research/architecture-lab/environment.txt
+            research/architecture-lab/build-times.txt
+            research/architecture-lab/sizes.txt
+            research/architecture-lab/Cargo.lock
+            research/architecture-lab/stage2-results.jsonl
+            research/architecture-lab/stage2-summary.json
+            research/architecture-lab/parity-results.json
+            research/architecture-lab/history-stage2-results.json
