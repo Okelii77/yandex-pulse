@@ -63,7 +63,7 @@ const b64url = (input) => {
 const isolateJwks = { keys: [], expires: 0, refreshed: 0 };
 // Completed public key material only, no I/O promises or tokens shared across requests.
 const JWKS_TTL = 60000, JWKS_REFRESH_MIN = 5000;
-export async function githubOidcIdentity(token, now = Date.now(), load = fetch, trace = () => { }, cache = load === fetch ? isolateJwks : null) {
+export async function githubOidcIdentity(token, now = Date.now(), load = fetch, trace = () => { }, cache = load === fetch ? isolateJwks : null, pinnedSha) {
     const audience = "yandex-pulse-rc-ingest", workflow = "pulse2-rc-dispatch.yml";
     let stage = 'jwt_shape';
     const deny = (code) => { trace(code); return null; };
@@ -88,6 +88,7 @@ export async function githubOidcIdentity(token, now = Date.now(), load = fetch, 
             String(claims.repository_id) !== "1427282907" ||
             claims.ref !== "refs/heads/research/pulse-architecture-20261128" ||
             claims.environment !== "pulse-rc" || claims.event_name !== "workflow_dispatch" ||
+            (pinnedSha && (claims.sha !== pinnedSha || claims.workflow_sha !== pinnedSha)) ||
             String(claims.repository_owner_id) !== "108305520" ||
             claims.sub !== "repo:Okelii77@108305520/yandex-pulse@1427282907:environment:pulse-rc" ||
             !/^\d{1,20}$/.test(String(claims.run_id)) || !/^\d{1,10}$/.test(String(claims.run_attempt)) ||
@@ -145,7 +146,7 @@ export async function githubOidcIdentity(token, now = Date.now(), load = fetch, 
     }
 }
 // Private, bounded diagnostic evidence; no raw claims, kid, JWT, URL or headers.
-const OIDC_DIAG_VERSION = "rc2-stage5-ops-3";
+const OIDC_DIAG_VERSION = "rc2-stage6-preflight-1";
 async function auditOidc(db, now, ray, steps) {
     try {
         if (!await reserveBudget(db, now, 0, 0, 80, 4))
@@ -339,30 +340,93 @@ export async function accountQuotaGuard(env, now, send = fetch) {
         return "analytics_unavailable";
     }
 }
+const DISPATCH_BRANCH = "research/pulse-architecture-20261128";
+const DISPATCH_URL = "https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml";
+function githubHeaders(env) { return { Authorization: "Bearer " + env.RC_GITHUB_TOKEN, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2026-03-10", "User-Agent": "YandexPulse-Scheduler/2.0", "Content-Type": "application/json" }; }
+const validPin = (env) => typeof env.RC_PINNED_SHA === "string" && /^[a-f0-9]{40}$/.test(env.RC_PINNED_SHA);
+export async function recoverUnsent(db, slot, now) {
+    // A crash before the durable send marker can be recovered, without another launch reservation.
+    // Fencing rotates the private lease, and only one contender can take it.
+    const token = crypto.randomUUID();
+    const r = await db.prepare("UPDATE rc_lease SET token=?,expires=?,attempts=attempts+1 WHERE slot=? AND state='reserved' AND owner IS NULL AND dispatch_at IS NULL AND expires<=? AND attempts<2 AND NOT EXISTS(SELECT 1 FROM rc_dispatch_evidence WHERE slot=?) RETURNING token").bind(token, Math.min(now + LEASE, slot + SLOT), slot, now, slot).first();
+    return r ? { slot, token } : null;
+}
+export async function reconcileDispatch(env, slot, now, send = fetch) {
+    // Never issue a second POST for an ambiguous send. Reconcile the original run by a unique
+    // public correlation label (not a bearer credential), pinned commit, branch, workflow and event.
+    const lease = await env.DB.prepare("SELECT state,owner,expires,dispatch_at,dispatch_id FROM rc_lease WHERE slot=?").bind(slot).first();
+    if (!lease || lease.state !== "reserved" || lease.owner || !lease.dispatch_at || typeof lease.dispatch_id !== "string" || !/^[a-f0-9-]{36}$/.test(lease.dispatch_id))
+        return { action: "skip" };
+    if (!validPin(env))
+        return { action: "pin_missing" };
+    const evidence = await env.DB.prepare("SELECT run_id FROM rc_dispatch_evidence WHERE slot=?").bind(slot).first();
+    const known = typeof evidence?.run_id === "string" && /^\d{1,20}$/.test(evidence.run_id) ? evidence.run_id : null;
+    try {
+        const path = known ? "https://api.github.com/repos/Okelii77/yandex-pulse/actions/runs/" + known : DISPATCH_URL + "/runs?" + new URLSearchParams({ branch: DISPATCH_BRANCH, event: "workflow_dispatch", head_sha: env.RC_PINNED_SHA, per_page: "20", created: ">=" + iso(lease.dispatch_at - 60000) });
+        const res = await send(path, { redirect: "manual", signal: AbortSignal.timeout(5000), headers: githubHeaders(env) });
+        if (res.status !== 200)
+            return { action: "reconcile_unavailable" };
+        const json = await res.json(), all = known ? [json] : json.workflow_runs;
+        if (!Array.isArray(all) || all.length > 20)
+            return { action: "reconcile_unavailable" };
+        const matches = all.filter((x) => x.display_title === "RC2 " + slot + " " + lease.dispatch_id && x.head_sha === env.RC_PINNED_SHA && x.head_branch === DISPATCH_BRANCH && x.event === "workflow_dispatch" && x.run_attempt === 1 && Number.isSafeInteger(x.id) && x.id > 0 && Date.parse(x.created_at) >= lease.dispatch_at - 60000 && Date.parse(x.created_at) < slot + SLOT && (!known || String(x.id) === known));
+        if (matches.length !== 1)
+            return { action: "uncertain_no_resend" };
+        const run = matches[0], id = String(run.id);
+        if (!["queued", "requested", "waiting", "pending", "in_progress"].includes(run.status))
+            return { action: "run_terminal_no_resend" };
+        const b = await env.DB.batch([
+            env.DB.prepare("UPDATE rc_lease SET expires=MAX(expires,?) WHERE slot=? AND state='reserved' AND owner IS NULL AND dispatch_id=? AND dispatch_at=? AND (NOT EXISTS(SELECT 1 FROM rc_dispatch_evidence WHERE slot=? AND run_id IS NOT NULL AND run_id!=?))").bind(Math.min(now + LEASE, slot + SLOT), slot, lease.dispatch_id, lease.dispatch_at, slot, id),
+            env.DB.prepare("INSERT INTO rc_dispatch_evidence(slot,at,http_status,run_id) SELECT ?,?,200,? WHERE EXISTS(SELECT 1 FROM rc_lease WHERE slot=? AND state='reserved' AND owner IS NULL AND dispatch_id=?) ON CONFLICT(slot) DO UPDATE SET run_id=excluded.run_id,http_status=200 WHERE rc_dispatch_evidence.run_id IS NULL OR rc_dispatch_evidence.run_id=excluded.run_id").bind(slot, now, id, slot, lease.dispatch_id)
+        ]);
+        return { action: b[0].meta.changes === 1 ? "reconciled" : "skip", slot };
+    }
+    catch {
+        return { action: "reconcile_unavailable" };
+    }
+}
 export async function tick(env, now, send = fetch) {
     if (env.RC_ENABLE_DISPATCH !== "1" || !env.RC_GITHUB_TOKEN || (env.RC_LOCAL_ONLY === "1" && send === fetch))
         return { action: "disabled" };
+    let claim = null;
     if (env.RC_LOCAL_ONLY !== "1") {
         if (!observationWindow(env, now).active)
             return { action: "outside_window" };
+        if (!validPin(env))
+            return { action: "pin_missing" };
         const slot = epoch(now), day = Math.floor(now / DAY) * DAY;
-        if (await env.DB.prepare("SELECT slot FROM rc_lease WHERE slot=?").bind(slot).first())
-            return { action: "skip" };
-        const budget = await env.DB.prepare("SELECT launch FROM rc_daily_budget WHERE day=?").bind(day).first();
-        if ((budget?.launch || 0) >= Math.max(1, Math.min(48, Number(env.RC_MAX_LAUNCHES) || 1)))
-            return { action: "skip" };
-        const guard = await accountQuotaGuard(env, now, send);
-        if (guard !== "ok")
-            return { action: guard };
+        const existing = await env.DB.prepare("SELECT state,owner,expires,dispatch_at FROM rc_lease WHERE slot=?").bind(slot).first();
+        if (existing) {
+            if (existing.state !== "reserved" || existing.owner || existing.expires > now)
+                return { action: "skip" };
+            const guard = await accountQuotaGuard(env, now, send);
+            if (guard !== "ok")
+                return { action: guard };
+            if (existing.dispatch_at !== null)
+                return reconcileDispatch(env, slot, now, send);
+            claim = await recoverUnsent(env.DB, slot, now);
+            if (!claim)
+                return { action: "skip" };
+        }
+        else {
+            const budget = await env.DB.prepare("SELECT launch FROM rc_daily_budget WHERE day=?").bind(day).first();
+            if ((budget?.launch || 0) >= Math.max(1, Math.min(48, Number(env.RC_MAX_LAUNCHES) || 1)))
+                return { action: "skip" };
+            const guard = await accountQuotaGuard(env, now, send);
+            if (guard !== "ok")
+                return { action: guard };
+        }
     }
-    const claim = await budgetedAcquire(env, now);
+    claim = claim || await budgetedAcquire(env, now);
     if (!claim)
         return { action: "skip" };
-    const began = Date.now();
-    await env.DB.prepare("UPDATE rc_lease SET dispatch_at=? WHERE slot=? AND token=?").bind(now, claim.slot, claim.token).run();
+    const began = Date.now(), correlation = crypto.randomUUID();
+    // Persist send intent BEFORE touching GitHub; never resend after an ambiguous failure.
+    const marker = await env.DB.prepare("UPDATE rc_lease SET dispatch_at=?,dispatch_id=? WHERE slot=? AND token=? AND state='reserved' AND dispatch_at IS NULL AND expires>? RETURNING slot").bind(now, correlation, claim.slot, claim.token, now).first();
+    if (!marker)
+        return { action: "skip" };
     try {
-        const r = await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches", { method: "POST", redirect: "manual", signal: AbortSignal.timeout(10000), headers: { Authorization: "Bearer " + env.RC_GITHUB_TOKEN, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2026-03-10", "User-Agent": "YandexPulse-Scheduler/2.0", "Content-Type": "application/json" }, body: JSON.stringify({ ref: "research/pulse-architecture-20261128", inputs: { slot: String(claim.slot), lease: "" } }) });
-        await env.DB.prepare("UPDATE rc_lease SET dispatch_ms=? WHERE slot=? AND token=?").bind(Date.now() - began, claim.slot, claim.token).run();
+        const r = await send(DISPATCH_URL + "/dispatches", { method: "POST", redirect: "manual", signal: AbortSignal.timeout(10000), headers: githubHeaders(env), body: JSON.stringify({ ref: DISPATCH_BRANCH, inputs: { slot: String(claim.slot), lease: correlation } }) });
         let runId = null;
         if (r.status === 200) {
             try {
@@ -372,7 +436,10 @@ export async function tick(env, now, send = fetch) {
             }
             catch { }
         }
-        await env.DB.prepare("INSERT OR REPLACE INTO rc_dispatch_evidence(slot,at,http_status,run_id) VALUES(?,?,?,?)").bind(claim.slot, now, r.status, runId).run();
+        await env.DB.batch([
+            env.DB.prepare("UPDATE rc_lease SET dispatch_ms=? WHERE slot=? AND token=?").bind(Date.now() - began, claim.slot, claim.token),
+            env.DB.prepare("INSERT OR IGNORE INTO rc_dispatch_evidence(slot,at,http_status,run_id) VALUES(?,?,?,?)").bind(claim.slot, now, r.status, runId)
+        ]);
         return { action: r.status === 200 && runId ? "accepted" : "uncertain_wait_for_expiry", slot: claim.slot };
     }
     catch {
@@ -433,7 +500,7 @@ async function authorized(req, env) {
             return null;
         }
         trace("authorization_ok");
-        const id = await githubOidcIdentity(token.slice(7), Date.now(), fetch, trace);
+        const id = await githubOidcIdentity(token.slice(7), Date.now(), fetch, trace, isolateJwks, env.RC_PINNED_SHA);
         if (!id)
             return null;
         trace("d1_consume_begin");
@@ -469,7 +536,7 @@ export default {
             if (req.method === "GET" && path === "/api/health") {
                 const row = await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();
                 const lease = await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();
-                return response({ ok: true, version: "2.0.0-rc.2", build: OIDC_DIAG_VERSION, environment: "staging", mode: env.RC_MODE || "synthetic", trigger_ready: !!(observationWindow(env, now).active && env.RC_CF_ANALYTICS_TOKEN && env.RC_CF_ACCOUNT_ID && env.RC_ENABLE_DISPATCH === "1" && env.RC_GITHUB_TOKEN && env.RC_TURNSTILE_SECRET && env.RC_TURNSTILE_SITE_KEY), last_observation: row?.generated_at || null, stale: !row || now - Date.parse(row.generated_at) > 90 * 60000, last_slot: row?.slot || null, lease: lease ? { slot: lease.slot, state: lease.state, expires: iso(lease.expires), dispatch_ms: lease.dispatch_ms, runner_wait_ms: lease.started_at && lease.dispatch_at ? Math.max(0, lease.started_at - lease.dispatch_at) : null, started_at: lease.started_at ? iso(lease.started_at) : null, finished_at: lease.finished_at ? iso(lease.finished_at) : null } : null }, 200, cors);
+                return response({ ok: true, version: "2.0.0-rc.2", build: OIDC_DIAG_VERSION, pinned_sha: env.RC_PINNED_SHA || null, environment: "staging", mode: env.RC_MODE || "synthetic", trigger_ready: !!(observationWindow(env, now).active && validPin(env) && env.RC_CF_ANALYTICS_TOKEN && env.RC_CF_ACCOUNT_ID && env.RC_ENABLE_DISPATCH === "1" && env.RC_GITHUB_TOKEN && env.RC_TURNSTILE_SECRET && env.RC_TURNSTILE_SITE_KEY), last_observation: row?.generated_at || null, stale: !row || now - Date.parse(row.generated_at) > 90 * 60000, last_slot: row?.slot || null, lease: lease ? { slot: lease.slot, state: lease.state, expires: iso(lease.expires), dispatch_ms: lease.dispatch_ms, runner_wait_ms: lease.started_at && lease.dispatch_at ? Math.max(0, lease.started_at - lease.dispatch_at) : null, started_at: lease.started_at ? iso(lease.started_at) : null, finished_at: lease.finished_at ? iso(lease.finished_at) : null } : null }, 200, cors);
             }
             if (req.method === "GET" && path === "/api/status") {
                 const row = await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();
@@ -489,6 +556,8 @@ export default {
             if (req.method === "POST" && ["/api/ynison/acquire", "/api/ynison/finish"].includes(path))
                 return response({ error: "shared_gate_not_authorized_for_staging" }, 403, cors);
             if (req.method === "POST" && (path === "/api/rc/acquire" || path === "/api/rc/start" || path === "/api/rc/ingest")) {
+                if (env.RC_LOCAL_ONLY !== "1" && observationWindow(env, now).valid && !validPin(env))
+                    return response({ error: "staging_disabled" }, 503, cors);
                 const identity = await authorized(req, env);
                 if (!identity)
                     return response({ error: "unauthorized" }, 401, cors);
