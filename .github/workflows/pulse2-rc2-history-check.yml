@@ -1,0 +1,17 @@
+name: RC2 cloud history revision verification
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-rc2-history-check.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: python3 research/pulse2-control/cloud-history-check.py
+      - run: node research/pulse2-control/cloud-history-browser.mjs
