@@ -2,14 +2,14 @@ name: RC2 cloud smoke (synthetic read only)
 on:
   push:
     branches: ['research/pulse-architecture-20261128']
-    paths: ['.github/workflows/pulse2-rc2-cloud-smoke.yml','research/pulse2-control/cloud-smoke.py']
+    paths: ['.github/workflows/pulse2-rc2-cloud-smoke.yml','research/pulse2-control/cloud-smoke.py','research/pulse2-control/cloud-browser.mjs']
 permissions:
   contents: read
 jobs:
   smoke:
     if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -18,3 +18,5 @@ jobs:
         run: python3 research/pulse2-control/run-synthetic.py --self-test
       - name: Check only the isolated RC2 endpoint
         run: python3 research/pulse2-control/cloud-smoke.py
+      - name: Actual Chrome rendering of synthetic staging
+        run: node research/pulse2-control/cloud-browser.mjs

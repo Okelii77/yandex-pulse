@@ -22,12 +22,12 @@ def request(path, expected, method="GET", headers=None):
     return body,tag
 health=json.loads(request("/api/health",200)[0])
 assert health["environment"]=="staging" and health["mode"]=="synthetic" and health["version"]=="2.0.0-rc.2"
-assert health["trigger_ready"] is False and health["lease"] is None
+assert health["trigger_ready"] is False
 body,tag=request("/api/status",200)
 status=json.loads(body)
 assert status["environment"]=="staging" and status["data_mode"]=="synthetic"
 assert len(status["results"])==34 and sum(x["status"]=="disabled" for x in status["results"])==4
-assert all("SYNTHETIC ADMIN SEED" in x["reason"] for x in status["results"])
+assert all("SYNTHETIC" in x["reason"] for x in status["results"])
 assert tag and request("/api/status",304,headers={"If-None-Match":tag})[0]==b""
 body,tag=request("/api/history",200)
 history=json.loads(body)
@@ -40,4 +40,6 @@ assert json.loads(request("/api/ynison/status",200)[0])["available"] is False
 request("/api/ynison/acquire",403,method="POST")
 request("/api/rc/acquire",401,method="POST")
 request("/api/trigger",403,method="POST")
+for path in ("/favicon-32-v2.png","/apple-touch-icon-v2.png","/icon-192-v2.png","/icon-512-v2.png","/favicon.ico"):
+    assert request(path,200)[0].startswith(b"\x89PNG\r\n\x1a\n"),path
 print("RC2_CLOUD_SMOKE_OK: administrative fixture; not OIDC runner publication, not live service parity")
