@@ -2,6 +2,7 @@
 type DB={prepare(sql:string):any;batch(statements:any[]):Promise<any[]>};
 type Env={DB:DB;RC_LOCAL_ONLY?:string;LOCAL_TOKEN?:string;RC_ENABLE_DISPATCH?:string;RC_GITHUB_TOKEN?:string;RC_ORIGIN?:string};
 const SLOT=1800000,LEASE=600000,DAY=86400000;
+const CATALOG_IDS=new Set(["music-web","music-catalog","music-rest","music-ynison","music-history","music-queues","cloud-web","cloud-console","cloud-storage","cloud-iam","cloud-monitoring","mail-web","mail-imap","mail-smtp","mail-360","disk-web","disk-api","id-passport","id-oauth","wiki-web","wiki-api","maps-web","maps-geocoder","search-web","search-webmaster","ai-studio","ai-models","ai-speech","ai-vision","other-telemost","other-metrika","other-tracker","other-market","other-weather"]);
 const epoch=(now:number)=>Math.floor(now/SLOT)*SLOT;
 const iso=(now:number)=>new Date(now).toISOString();
 const response=(body:any,status=200,headers:Record<string,string>={})=>new Response(status===304?null:JSON.stringify(body),{status,headers:{"Content-Type":"application/json;charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...headers}});
@@ -94,15 +95,20 @@ async function githubOidcValid(token: string, audience="yandex-pulse-rc-ingest",
 
 export async function acquire(db:DB,now:number){
  const slot=epoch(now),token=crypto.randomUUID();
- const row=await db.prepare("INSERT INTO rc_lease(slot,token,expires,state) SELECT ?,?,?,'running' WHERE NOT EXISTS(SELECT 1 FROM rc_latest WHERE slot>=?) AND NOT EXISTS(SELECT 1 FROM rc_lease WHERE state='running' AND expires>? AND slot!=?) ON CONFLICT(slot) DO UPDATE SET token=excluded.token,expires=excluded.expires,state='running' WHERE rc_lease.state!='done' AND rc_lease.expires<=? RETURNING token").bind(slot,token,now+LEASE,slot,now,slot,now).first();
+ const row=await db.prepare("INSERT INTO rc_lease(slot,token,expires,state) SELECT ?,?,?,'reserved' WHERE NOT EXISTS(SELECT 1 FROM rc_latest WHERE slot>=?) AND NOT EXISTS(SELECT 1 FROM rc_lease WHERE state IN ('reserved','running') AND expires>? AND slot!=?) ON CONFLICT(slot) DO UPDATE SET token=excluded.token,expires=excluded.expires,state='reserved' WHERE rc_lease.state!='done' AND rc_lease.expires<=? RETURNING token").bind(slot,token,now+LEASE,slot,now,slot,now).first();
  return row?{slot,token}:null;
+}
+export async function start(db:DB,claim:{slot:number;token:string},now:number){
+ if(!Number.isSafeInteger(claim?.slot)||typeof claim?.token!=="string")return false;
+ const r=await db.prepare("UPDATE rc_lease SET state='running',expires=? WHERE slot=? AND token=? AND state='reserved' AND expires>? RETURNING token").bind(now+LEASE,claim.slot,claim.token,now).first();return !!r;
 }
 export async function publish(db:DB,claim:{slot:number;token:string},input:any,now:number){
  const data=safeStatus(input);
- if(data.checks.length!==34||new Set(data.checks.map((x:any)=>x.id)).size!==34||new Set(data.results.map((x:any)=>x.id)).size!==34)throw Error("catalog_incomplete");
+ if(data.checks.length!==34||new Set(data.checks.map((x:any)=>x.id)).size!==34||new Set(data.results.map((x:any)=>x.id)).size!==34||data.checks.some((x:any)=>!CATALOG_IDS.has(x.id))||data.results.some((x:any)=>!CATALOG_IDS.has(x.id)))throw Error("catalog_incomplete");
+ data.generated_at=iso(Date.parse(data.generated_at));for(const r of data.results)r.checked_at=iso(Date.parse(r.checked_at));
  if(!Number.isSafeInteger(claim.slot)||typeof claim.token!=="string"||claim.slot!==epoch(claim.slot)||Date.parse(data.generated_at)<claim.slot||Date.parse(data.generated_at)>now+60000)throw Error("invalid_observation");
  if(data.results.some((x:any)=>Date.parse(x.checked_at)>Date.parse(data.generated_at)+60000))throw Error("future_component");
- const measured=data.results.filter((x:any)=>["ok","down","degraded","no_data"].includes(x.status)).map((x:any)=>[x.id,x.checked_at,x.status,x.latency_ms]);
+ const measured=data.results.filter((x:any)=>["ok","down","degraded","no_data"].includes(x.status)&&Date.parse(x.checked_at)>=claim.slot).map((x:any)=>[x.id,x.checked_at,x.status,x.latency_ms]);
  const guard="EXISTS(SELECT 1 FROM rc_lease WHERE slot=? AND token=? AND state='running' AND expires>?) AND EXISTS(SELECT 1 FROM rc_latest WHERE id=1 AND slot=? AND token=?)";
  const args=[claim.slot,claim.token,now,claim.slot,claim.token];
  const b=await db.batch([
@@ -143,7 +149,7 @@ export async function history(db:DB,request:Request,now:number,headers:Record<st
  return response(full,200,{...headers,ETag:tag});
 }
 export async function tick(env:Env,now:number,send:typeof fetch=fetch){
- if(env.RC_ENABLE_DISPATCH!=="1"||!env.RC_GITHUB_TOKEN)return {action:"disabled"};
+ if(env.RC_ENABLE_DISPATCH!=="1"||!env.RC_GITHUB_TOKEN||(env.RC_LOCAL_ONLY==="1"&&send===fetch))return {action:"disabled"};
  const claim=await acquire(env.DB,now);if(!claim)return {action:"skip"};
  try{const r=await send("https://api.github.com/repos/Okelii77/yandex-pulse/actions/workflows/pulse2-rc-dispatch.yml/dispatches",{method:"POST",redirect:"error",headers:{Authorization:"Bearer "+env.RC_GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"Pulse-RC","Content-Type":"application/json"},body:JSON.stringify({ref:"research/pulse-architecture-20261128",inputs:{slot:String(claim.slot),lease:claim.token}})});
  return {action:r.ok?"accepted":"uncertain_wait_for_expiry",slot:claim.slot};
@@ -156,14 +162,14 @@ export default {
  const now=Date.now(),url=new URL(req.url),path=url.pathname;const cors:Record<string,string>=req.headers.get("Origin")===env.RC_ORIGIN&&env.RC_ORIGIN?{"Access-Control-Allow-Origin":env.RC_ORIGIN,"Access-Control-Allow-Headers":"Content-Type, If-None-Match","Access-Control-Allow-Methods":"GET, OPTIONS","Access-Control-Expose-Headers":"ETag, Retry-After","Vary":"Origin"}:{};
  try{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors});
- if(req.method==="GET"&&path==="/api/health")return response({ok:true,version:"2.0.0-rc.1",trigger_ready:false},200,cors);
+ if(req.method==="GET"&&path==="/api/health"){const row=await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();const lease=await env.DB.prepare("SELECT slot,state,expires FROM rc_lease ORDER BY slot DESC LIMIT 1").first();return response({ok:true,version:"2.0.0-rc.1",trigger_ready:false,last_observation:row?.generated_at||null,stale:!row||now-Date.parse(row.generated_at)>90*60000,last_slot:row?.slot||null,lease:lease?{slot:lease.slot,state:lease.state,expires:iso(lease.expires)}:null},200,cors);}
  if(req.method==="GET"&&path==="/api/status"){const row=await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();if(!row)return response({error:"waiting"},503,cors);const tag='"s-'+row.revision+'"';return req.headers.get("If-None-Match")===tag?response(null,304,{...cors,ETag:tag}):response(JSON.parse(row.payload),200,{...cors,ETag:tag});}
  if(req.method==="GET"&&path==="/api/history")return await history(env.DB,req,now,cors);
- if(req.method==="POST"&&(path==="/api/rc/acquire"||path==="/api/rc/ingest")){
+ if(req.method==="POST"&&(path==="/api/rc/acquire"||path==="/api/rc/start"||path==="/api/rc/ingest")){
  if(!await authorized(req,env))return response({error:"unauthorized"},401,cors);
  if(path.endsWith("acquire")){const claim=await acquire(env.DB,now);return response(claim||{error:"busy"},claim?200:409,cors);}
  const raw=await req.text();if(new TextEncoder().encode(raw).length>100000)return response({error:"too_large"},413,cors);
- const data=JSON.parse(raw);const ok=await publish(env.DB,data.claim,data.payload,now);return response({ok},ok?200:409,cors);}
+ const data=JSON.parse(raw);if(path.endsWith("/start")){const ok=await start(env.DB,data.claim,now);return response({ok},ok?200:409,cors);}const ok=await publish(env.DB,data.claim,data.payload,now);return response({ok},ok?200:409,cors);}
  // Never expose or replace the existing production Ynison gate here.
  return response({error:"not_found"},404,cors);
  }catch{return response({error:"invalid_or_unavailable"},500,cors);}

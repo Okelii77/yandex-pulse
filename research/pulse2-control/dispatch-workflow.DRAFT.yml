@@ -1,0 +1,49 @@
+# DRAFT ONLY — do not move into .github/workflows or enable without approval.
+name: Pulse 2.0 staging dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      slot:
+        required: false
+        type: string
+      lease:
+        required: false
+        type: string
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  stage:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128' && vars.PULSE_RC_STAGE_APPROVED == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: pulse-rc
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r monitor/requirements.txt
+      - run: cargo build --release --locked --manifest-path research/pulse2-rc/Cargo.toml
+      - run: python research/pulse2-control/run-approved.py
+        env:
+          PULSE_RC_STAGE_APPROVED: ${{ vars.PULSE_RC_STAGE_APPROVED }}
+          PULSE_RC_APPROVED_PUBLIC: ${{ vars.PULSE_RC_STAGE_APPROVED }}
+          PULSE_RC_APPROVED_ADAPTERS: ${{ vars.PULSE_RC_STAGE_APPROVED }}
+          PULSE_RC_API_URL: ${{ vars.PULSE_RC_API_URL }}
+          PULSE_RC_SLOT: ${{ inputs.slot }}
+          PULSE_RC_LEASE: ${{ inputs.lease }}
+          YANDEX_MUSIC_TOKEN: ${{ secrets.YANDEX_MUSIC_TOKEN }}
+          YANDEX_DISK_TOKEN: ${{ secrets.YANDEX_DISK_TOKEN }}
+          YANDEX_WIKI_TOKEN: ${{ secrets.YANDEX_WIKI_TOKEN }}
+          YANDEX_WIKI_ORG_ID: ${{ vars.YANDEX_WIKI_ORG_ID }}
+          YANDEX_WIKI_TEST_SLUG: ${{ vars.YANDEX_WIKI_TEST_SLUG }}
+          YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
+          YC_IAM_TOKEN: ${{ secrets.YC_IAM_TOKEN }}
+          YC_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.YC_SERVICE_ACCOUNT_KEY_JSON }}
+          YC_MONITORING_API_KEY: ${{ secrets.YC_MONITORING_API_KEY }}
+          YC_AI_API_KEY: ${{ secrets.YC_AI_API_KEY }}
+          PULSE_ENABLE_BILLABLE_PROBES: '0'
+          PULSE_YNISON_AUTOPROBE: '0'
