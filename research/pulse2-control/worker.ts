@@ -79,7 +79,8 @@ export async function githubOidcIdentity(token: string, now=Date.now(), load:typ
        String(claims.repository_id)!=="1427282907" ||
        claims.ref!=="refs/heads/research/pulse-architecture-20261128" ||
        claims.environment!=="pulse-rc" || claims.event_name!=="workflow_dispatch" ||
-       claims.sub!=="repo:Okelii77/yandex-pulse:environment:pulse-rc" ||
+       String(claims.repository_owner_id)!=="108305520" ||
+       claims.sub!=="repo:Okelii77@108305520/yandex-pulse@1427282907:environment:pulse-rc" ||
        !/^\d{1,20}$/.test(String(claims.run_id)) || !/^\d{1,10}$/.test(String(claims.run_attempt)) ||
        typeof claims.jti!=="string" || !/^[A-Za-z0-9_-]{8,128}$/.test(claims.jti) ||
        (claims.job_workflow_ref&&claims.job_workflow_ref!==claims.workflow_ref) ||

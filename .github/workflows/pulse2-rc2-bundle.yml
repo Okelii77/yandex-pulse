@@ -2,7 +2,7 @@ name: RC2 locked cloud bundle
 on:
   push:
     branches: ['research/pulse-architecture-20261128']
-    paths: ['.github/workflows/pulse2-rc2-bundle.yml','research/pulse2-control/build-cloud-bundle.mjs']
+    paths: ['.github/workflows/pulse2-rc2-bundle.yml','research/pulse2-control/build-cloud-bundle.mjs','research/pulse2-control/worker.ts']
 permissions:
   contents: write
 jobs:
