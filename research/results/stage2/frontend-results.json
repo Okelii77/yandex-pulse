@@ -1,0 +1,422 @@
+[
+  {
+    "device": "desktop",
+    "iteration": 1,
+    "ready_ms": 122.6736949999995,
+    "dom_content_loaded_ms": 38.100000000034925,
+    "load_ms": 38.70000000001164,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 3974316,
+    "graph_frame_ms": [
+      15.799999999988358,
+      34.79999999998836,
+      31.900000000023283,
+      33.199999999953434,
+      33.20000000001164
+    ],
+    "script_seconds": 0.007508,
+    "layout_seconds": 0.0037659999999999994
+  },
+  {
+    "device": "desktop",
+    "iteration": 2,
+    "ready_ms": 116.32669799999894,
+    "dom_content_loaded_ms": 26.899999999965075,
+    "load_ms": 27.29999999998836,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 3979380,
+    "graph_frame_ms": [
+      28.29999999998836,
+      23.5,
+      33.70000000001164,
+      33,
+      33.59999999997672
+    ],
+    "script_seconds": 0.006796999999999999,
+    "layout_seconds": 0.0040409999999999995
+  },
+  {
+    "device": "desktop",
+    "iteration": 3,
+    "ready_ms": 117.01249800000005,
+    "dom_content_loaded_ms": 30.900000000023283,
+    "load_ms": 31.400000000023283,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 5067636,
+    "graph_frame_ms": [
+      21.29999999998836,
+      34.79999999998836,
+      31.70000000001164,
+      33.300000000046566,
+      33.29999999998836
+    ],
+    "script_seconds": 0.007877000000000002,
+    "layout_seconds": 0.0042190000000000005
+  },
+  {
+    "device": "desktop",
+    "iteration": 4,
+    "ready_ms": 116.81794799999989,
+    "dom_content_loaded_ms": 26.29999999998836,
+    "load_ms": 26.699999999953434,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 6278296,
+    "graph_frame_ms": [
+      23.599999999976717,
+      26.70000000001164,
+      33.59999999997672,
+      33.20000000001164,
+      33.100000000034925
+    ],
+    "script_seconds": 0.006844000000000001,
+    "layout_seconds": 0.004045999999999999
+  },
+  {
+    "device": "desktop",
+    "iteration": 5,
+    "ready_ms": 117.7845070000003,
+    "dom_content_loaded_ms": 29.20000000001164,
+    "load_ms": 29.599999999976717,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 7486076,
+    "graph_frame_ms": [
+      20.400000000023283,
+      34.70000000001164,
+      32.29999999998836,
+      33.5,
+      33.100000000034925
+    ],
+    "script_seconds": 0.007944999999999999,
+    "layout_seconds": 0.004467999999999999
+  },
+  {
+    "device": "desktop",
+    "iteration": 6,
+    "ready_ms": 122.70656300000155,
+    "dom_content_loaded_ms": 29.5,
+    "load_ms": 29.900000000023283,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 6677520,
+    "graph_frame_ms": [
+      21.599999999976717,
+      32.29999999998836,
+      33.40000000002328,
+      33.40000000002328,
+      33.09999999997672
+    ],
+    "script_seconds": 0.007672999999999999,
+    "layout_seconds": 0.0039559999999999994
+  },
+  {
+    "device": "desktop",
+    "iteration": 7,
+    "ready_ms": 115.64657400000033,
+    "dom_content_loaded_ms": 27.399999999965075,
+    "load_ms": 27.79999999998836,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 10814216,
+    "graph_frame_ms": [
+      23.20000000001164,
+      32.5,
+      33.29999999998836,
+      33.199999999953434,
+      33.5
+    ],
+    "script_seconds": 0.0067989999999999995,
+    "layout_seconds": 0.003776
+  },
+  {
+    "device": "desktop",
+    "iteration": 8,
+    "ready_ms": 117.89712300000065,
+    "dom_content_loaded_ms": 30.100000000034925,
+    "load_ms": 30.70000000001164,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 8572648,
+    "graph_frame_ms": [
+      20.79999999998836,
+      36.300000000046566,
+      30.599999999976717,
+      33.20000000001164,
+      33.29999999998836
+    ],
+    "script_seconds": 0.008064,
+    "layout_seconds": 0.004663999999999999
+  },
+  {
+    "device": "desktop",
+    "iteration": 9,
+    "ready_ms": 115.12485100000049,
+    "dom_content_loaded_ms": 33.399999999965075,
+    "load_ms": 33.899999999965075,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 12675356,
+    "graph_frame_ms": [
+      19.600000000034925,
+      39,
+      27.600000000034925,
+      33.5,
+      33.09999999997672
+    ],
+    "script_seconds": 0.007167999999999999,
+    "layout_seconds": 0.004009
+  },
+  {
+    "device": "desktop",
+    "iteration": 10,
+    "ready_ms": 116.39630000000034,
+    "dom_content_loaded_ms": 38.79999999998836,
+    "load_ms": 39.29999999998836,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 10906088,
+    "graph_frame_ms": [
+      18.900000000023283,
+      33.29999999998836,
+      33.29999999998836,
+      33.40000000002328,
+      33.29999999998836
+    ],
+    "script_seconds": 0.006886000000000001,
+    "layout_seconds": 0.003923
+  },
+  {
+    "device": "mobile",
+    "iteration": 1,
+    "ready_ms": 117.00369099999989,
+    "dom_content_loaded_ms": 30.70000000001164,
+    "load_ms": 31.20000000001164,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 13285940,
+    "graph_frame_ms": [
+      23.100000000034925,
+      33,
+      33.40000000002328,
+      33.20000000001164,
+      33.29999999998836
+    ],
+    "script_seconds": 0.0074930000000000005,
+    "layout_seconds": 0.004761000000000001
+  },
+  {
+    "device": "mobile",
+    "iteration": 2,
+    "ready_ms": 118.0317670000004,
+    "dom_content_loaded_ms": 31.900000000023283,
+    "load_ms": 32.29999999998836,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 17391884,
+    "graph_frame_ms": [
+      19.20000000001164,
+      33.20000000001164,
+      33.5,
+      33.29999999998836,
+      33.20000000001164
+    ],
+    "script_seconds": 0.007039,
+    "layout_seconds": 0.004593
+  },
+  {
+    "device": "mobile",
+    "iteration": 3,
+    "ready_ms": 143.96539200000007,
+    "dom_content_loaded_ms": 35.59999999997672,
+    "load_ms": 36.29999999998836,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 6673468,
+    "graph_frame_ms": [
+      23.399999999965075,
+      33.29999999998836,
+      33.40000000002328,
+      33.199999999953434,
+      33.5
+    ],
+    "script_seconds": 0.006665000000000001,
+    "layout_seconds": 0.004031000000000001
+  },
+  {
+    "device": "mobile",
+    "iteration": 4,
+    "ready_ms": 119.60297899999932,
+    "dom_content_loaded_ms": 35.899999999965075,
+    "load_ms": 36.399999999965075,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 10801240,
+    "graph_frame_ms": [
+      21.900000000023283,
+      33.20000000001164,
+      33.29999999998836,
+      33.20000000001164,
+      33.40000000002328
+    ],
+    "script_seconds": 0.007370999999999999,
+    "layout_seconds": 0.0049099999999999994
+  },
+  {
+    "device": "mobile",
+    "iteration": 5,
+    "ready_ms": 116.5360329999985,
+    "dom_content_loaded_ms": 34.79999999998836,
+    "load_ms": 35.29999999998836,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 14882152,
+    "graph_frame_ms": [
+      17.899999999965075,
+      33.29999999998836,
+      33.300000000046566,
+      33.29999999998836,
+      33.40000000002328
+    ],
+    "script_seconds": 0.008335,
+    "layout_seconds": 0.005063
+  },
+  {
+    "device": "mobile",
+    "iteration": 6,
+    "ready_ms": 116.00962000000072,
+    "dom_content_loaded_ms": 33.79999999998836,
+    "load_ms": 34.29999999998836,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 18966856,
+    "graph_frame_ms": [
+      19.899999999965075,
+      33.300000000046566,
+      33.5,
+      33.199999999953434,
+      33.20000000001164
+    ],
+    "script_seconds": 0.0076890000000000005,
+    "layout_seconds": 0.004556
+  },
+  {
+    "device": "mobile",
+    "iteration": 7,
+    "ready_ms": 121.1728490000005,
+    "dom_content_loaded_ms": 35.20000000001164,
+    "load_ms": 36.100000000034925,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 10395504,
+    "graph_frame_ms": [
+      27.900000000023283,
+      33.300000000046566,
+      33.399999999965075,
+      33.29999999998836,
+      33.20000000001164
+    ],
+    "script_seconds": 0.008379,
+    "layout_seconds": 0.0046689999999999995
+  },
+  {
+    "device": "mobile",
+    "iteration": 8,
+    "ready_ms": 122.84781099999964,
+    "dom_content_loaded_ms": 30.199999999953434,
+    "load_ms": 30.599999999976717,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 14545412,
+    "graph_frame_ms": [
+      28,
+      33.5,
+      33.09999999997672,
+      33.29999999998836,
+      33.20000000001164
+    ],
+    "script_seconds": 0.00834,
+    "layout_seconds": 0.004910999999999999
+  },
+  {
+    "device": "mobile",
+    "iteration": 9,
+    "ready_ms": 119.99138799999855,
+    "dom_content_loaded_ms": 32.29999999998836,
+    "load_ms": 33.100000000034925,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 18594000,
+    "graph_frame_ms": [
+      21.600000000034925,
+      33.20000000001164,
+      33.399999999965075,
+      33.300000000046566,
+      33.29999999998836
+    ],
+    "script_seconds": 0.007799,
+    "layout_seconds": 0.004493
+  },
+  {
+    "device": "mobile",
+    "iteration": 10,
+    "ready_ms": 115.92713499999991,
+    "dom_content_loaded_ms": 33.29999999998836,
+    "load_ms": 33.90000000002328,
+    "resources": 8,
+    "transfer_bytes": 383633,
+    "js_encoded_bytes": 46777,
+    "cards": 34,
+    "heap_bytes": 13132524,
+    "graph_frame_ms": [
+      20.099999999976717,
+      33.20000000001164,
+      33.300000000046566,
+      33.29999999998836,
+      33.29999999998836
+    ],
+    "script_seconds": 0.007383000000000001,
+    "layout_seconds": 0.004572
+  }
+]
