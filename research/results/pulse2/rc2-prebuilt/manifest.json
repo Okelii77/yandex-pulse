@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "source_commit": "0b3fc5da1c3bf63382976ff19cde5067a78896c9",
+  "source_tree": "2c6488ce5237838e7539db4f0d1cc4b6bd950a5f",
+  "sha256": "e073317a779d9e874f835908422b86cd5289ced7f8c4ae0f0c2b37e6bb84644f",
+  "bytes": 4048440,
+  "toolchain": "1.100.1",
+  "target": "x86_64-unknown-linux-gnu",
+  "runner": "ubuntu-24.04"
+}
