@@ -1,0 +1,32 @@
+{
+  "rss_reproduction": [
+    {
+      "parent_extra_mib": 0,
+      "ru_maxrss_kib": 95108,
+      "VmHWM_kib": 644
+    },
+    {
+      "parent_extra_mib": 64,
+      "ru_maxrss_kib": 160644,
+      "VmHWM_kib": 644
+    },
+    {
+      "parent_extra_mib": 128,
+      "ru_maxrss_kib": 291716,
+      "VmHWM_kib": 640
+    }
+  ],
+  "python_cpu_same_process_mock_ms": {
+    "concurrent_lazy": 89.8982075,
+    "single_opener": 29.313902,
+    "ssl_context_only": 61.286226
+  },
+  "sqlite_contract": {
+    "virtual_slots": 1488,
+    "concurrent_acquire_attempts": 32,
+    "successful_leases_first_slot": 1,
+    "samples_after_retention": 2882,
+    "latest_revision": 1488,
+    "tests": "passed"
+  }
+}

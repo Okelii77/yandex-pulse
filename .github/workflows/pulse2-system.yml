@@ -1,0 +1,38 @@
+name: Pulse 2.0 isolated system lab
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['research/pulse2-system/**','.github/workflows/pulse2-system.yml']
+permissions:
+  contents: read
+jobs:
+  system:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: research/pulse2-system
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.2'
+          cache: false
+      - run: rustup default stable && cargo generate-lockfile && cargo build --release --locked
+      - run: go build -o core-go core.go
+      - run: python test_store.py && python e2e.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pulse2-system-evidence
+          retention-days: 1
+          if-no-files-found: warn
+          path: |
+            research/pulse2-system/*-results.json
+            research/pulse2-system/Cargo.lock
