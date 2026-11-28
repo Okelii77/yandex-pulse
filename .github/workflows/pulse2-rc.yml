@@ -1,0 +1,43 @@
+name: Pulse 2.0 RC integration (offline)
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['research/pulse2-rc/**','.github/workflows/pulse2-rc.yml']
+permissions:
+  contents: read
+jobs:
+  rc:
+    if: github.ref == 'refs/heads/research/pulse-architecture-20261128'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: research/pulse2-rc
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.2'
+          cache: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: rustup default stable && cargo generate-lockfile && cargo build --locked --release
+      - run: go build -trimpath -ldflags='-s -w' -o core-go core.go
+      - run: python test_native.py
+      - name: Existing production regression suite (offline)
+        working-directory: .
+        run: |
+          python -m unittest discover -s monitor -p 'test_*.py'
+          node --test worker/test/*.test.mjs monitor/ynison_alt/*.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pulse2-rc-evidence
+          retention-days: 1
+          if-no-files-found: warn
+          path: |
+            research/pulse2-rc/native-results.json
+            research/pulse2-rc/Cargo.lock
