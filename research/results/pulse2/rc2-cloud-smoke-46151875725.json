@@ -1,0 +1,62 @@
+{
+  "run": 46151875725,
+  "job": 141000063063,
+  "result": "success",
+  "logs": [
+    "2026-11-28T13:53:52.6175021Z {\"path\": \"/api/health\", \"status\": 200, \"bytes\": 198, \"elapsed_ms\": 650}",
+    "2026-11-28T13:53:52.6175750Z {\"path\": \"/api/status\", \"status\": 200, \"bytes\": 12387, \"elapsed_ms\": 395}",
+    "2026-11-28T13:53:52.6176339Z {\"path\": \"/api/status\", \"status\": 304, \"bytes\": 0, \"elapsed_ms\": 384}",
+    "2026-11-28T13:53:52.6176985Z {\"path\": \"/api/history\", \"status\": 200, \"bytes\": 1704, \"elapsed_ms\": 547}",
+    "2026-11-28T13:53:52.6177543Z {\"path\": \"/api/history\", \"status\": 304, \"bytes\": 0, \"elapsed_ms\": 374}",
+    "2026-11-28T13:53:52.6178074Z {\"path\": \"/\", \"status\": 200, \"bytes\": 12467, \"elapsed_ms\": 51}",
+    "2026-11-28T13:53:52.6178625Z {\"path\": \"/live-api.js\", \"status\": 200, \"bytes\": 8116, \"elapsed_ms\": 50}",
+    "2026-11-28T13:53:52.6179316Z {\"path\": \"/api-config.js\", \"status\": 200, \"bytes\": 149, \"elapsed_ms\": 47}",
+    "2026-11-28T13:53:52.6180205Z {\"path\": \"/api/ynison/status\", \"status\": 200, \"bytes\": 143, \"elapsed_ms\": 235}",
+    "2026-11-28T13:53:52.6180800Z {\"path\": \"/api/ynison/acquire\", \"status\": 403, \"bytes\": 50, \"elapsed_ms\": 217}",
+    "2026-11-28T13:53:52.6181393Z {\"path\": \"/api/rc/acquire\", \"status\": 401, \"bytes\": 24, \"elapsed_ms\": 225}",
+    "2026-11-28T13:53:52.6181975Z {\"path\": \"/api/trigger\", \"status\": 403, \"bytes\": 28, \"elapsed_ms\": 231}",
+    "2026-11-28T13:53:52.6182590Z {\"path\": \"/favicon-32-v2.png\", \"status\": 200, \"bytes\": 921, \"elapsed_ms\": 50}",
+    "2026-11-28T13:53:52.6183450Z {\"path\": \"/apple-touch-icon-v2.png\", \"status\": 200, \"bytes\": 5404, \"elapsed_ms\": 42}",
+    "2026-11-28T13:53:52.6184136Z {\"path\": \"/icon-192-v2.png\", \"status\": 200, \"bytes\": 5519, \"elapsed_ms\": 35}",
+    "2026-11-28T13:53:52.6184721Z {\"path\": \"/icon-512-v2.png\", \"status\": 200, \"bytes\": 13356, \"elapsed_ms\": 54}",
+    "2026-11-28T13:53:52.6185309Z {\"path\": \"/favicon.ico\", \"status\": 200, \"bytes\": 921, \"elapsed_ms\": 48}",
+    "2026-11-28T13:53:52.6186059Z RC2_CLOUD_SMOKE_OK: administrative fixture; not OIDC runner publication, not live service parity",
+    "2026-11-28T13:54:04.1777629Z RC2_CLOUD_BROWSER {\"cards\":34,\"staging\":true,\"resources\":10,\"version\":\"STAGING · Yandex Pulse — мониторинг экосистемы\",\"render_ms\":1815,\"requests\":11,\"blocked\":0}"
+  ],
+  "analytics": {
+    "as_of": "2026-11-28T13:54:38.246Z",
+    "workers": {
+      "production": 81,
+      "unattributed": 31,
+      "total": 112
+    },
+    "d1": {
+      "production": {
+        "read": 161496,
+        "write": 319
+      },
+      "staging": {
+        "read": 280,
+        "write": 112
+      },
+      "total": {
+        "read": 161776,
+        "write": 431
+      }
+    },
+    "note": "GraphQL analytics may lag; billing access denied."
+  },
+  "main": "f6af7eda583020bcfeb522482b77b2addbe183f9",
+  "staging": {
+    "dispatch": "0",
+    "ingest": "1",
+    "max_launches": "1",
+    "mode": "synthetic",
+    "cron": []
+  },
+  "limitations": [
+    "No real OIDC publication yet; administrative seed.",
+    "No live Turnstile/dispatch test.",
+    "Seven-day observation not started."
+  ]
+}
