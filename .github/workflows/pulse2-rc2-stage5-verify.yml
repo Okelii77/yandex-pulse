@@ -1,0 +1,36 @@
+name: RC2 final disabled staging and prebuilt verification
+on:
+  push:
+    branches: ['research/pulse-architecture-20261128']
+    paths: ['.github/workflows/pulse2-rc2-stage5-verify.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify cached public binary on a fresh runner without Rust build
+        run: python3 research/pulse2-control/prebuilt-core.py
+      - name: Verify paused cloud build (read only)
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          opener=urllib.request.build_opener(NoRedirect)
+          base="https://yandex-pulse-rc2.oleg-pulse-03.workers.dev"
+          headers={"User-Agent":"YandexPulse-RC2-Smoke/2.0"}
+          def get(path):
+              with opener.open(urllib.request.Request(base+path,headers=headers),timeout=15) as r:return json.load(r),r.headers.get("ETag")
+          h,_=get("/api/health")
+          assert h["build"]=="rc2-stage5-ops-3" and h["environment"]=="staging" and h["mode"]=="synthetic" and h["trigger_ready"] is False
+          assert h["lease"]["state"]=="done"
+          data,tag=get("/api/status")
+          assert len(data["results"])==34 and data["data_mode"]=="synthetic" and tag=='"s-2"'
+          print("RC2_STAGE5_FINAL",json.dumps({"build":h["build"],"revision":2,"components":34,"trigger_ready":False,"lease":"done"}))
+          PY

@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-28",
+  "main": "f6af7eda583020bcfeb522482b77b2addbe183f9",
+  "history": {
+    "initial_run": 46162527664,
+    "optimized_run": 46163112098,
+    "revisions": [
+      1,
+      2
+    ],
+    "components": 34,
+    "series": 30,
+    "points": 60,
+    "duplicates": 0,
+    "full_bytes": 2820,
+    "legacy_delta_bytes": 2883,
+    "point_delta_bytes": 2404,
+    "browser_ms": 4470
+  },
+  "native": {
+    "run": 46162950542,
+    "bytes": 4048440,
+    "verify_ms": 9.59,
+    "wall_ms": 94.38,
+    "source_tree": "2c6488ce5237838e7539db4f0d1cc4b6bd950a5f",
+    "sha256": "e073317a779d9e874f835908422b86cd5289ced7f8c4ae0f0c2b37e6bb84644f",
+    "steps": [
+      {
+        "name": "Set up job",
+        "conclusion": "success"
+      },
+      {
+        "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build locked sources and verify loopback fixture",
+        "conclusion": "success"
+      },
+      {
+        "name": "Preserve one public binary, not an Actions storage artifact",
+        "conclusion": "success"
+      },
+      {
+        "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "conclusion": "success"
+      },
+      {
+        "name": "Complete job",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "control": {
+    "run": 46163214280,
+    "success": true,
+    "virtual_publications": 1489,
+    "shared_quota_guard": true
+  },
+  "turnstile": {
+    "http": 200,
+    "accepted": false,
+    "codes": [
+      "invalid-input-response"
+    ],
+    "positive_human_not_tested": true
+  },
+  "deployment": {
+    "source": "2ba0c9aa51d4d44986d5c60ad29c7e5609a3afca",
+    "sha256": "84b77ce9dea45f0c661c1d0bfe6a43331a6088adf60955906f40ff73eb518960",
+    "flags": {
+      "dispatch": 0,
+      "ingest": 0,
+      "paused": 1,
+      "verify_only": 0,
+      "max_launches": 1
+    },
+    "cron": []
+  },
+  "analytics": {
+    "as_of": "2026-11-28T16:06:22.653Z",
+    "requests": 187,
+    "rows_read": 163021,
+    "rows_written": 644,
+    "earlier_worker_quantiles": {
+      "as_of": "2026-11-28T16:05:42.873Z",
+      "staging": {
+        "requests": 105,
+        "errors": 0,
+        "cpuTimeP50": 1655,
+        "cpuTimeP99": 11791,
+        "wallTimeP50": 286687,
+        "wallTimeP99": 1549633
+      },
+      "production": {
+        "requests": 81,
+        "errors": 0
+      }
+    }
+  },
+  "limitations": [
+    "No new monitoring today. No actual dispatch credential or analytics token configured in Worker. Actual Cron, positive Turnstile, cloud run-ID claim and seven-day observation not yet tested.",
+    "Account analytics query works through connector, not yet from scheduler credential. Billing access denied; Free plan supplied by user. Analytics may lag."
+  ]
+}
