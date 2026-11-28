@@ -60,16 +60,21 @@ const b64url = (input) => {
     const decoded = atob(str + "=".repeat((4 - str.length % 4) % 4));
     return Uint8Array.from(decoded, c => c.charCodeAt(0));
 };
-export async function githubOidcIdentity(token, now = Date.now(), load = fetch) {
+export async function githubOidcIdentity(token, now = Date.now(), load = fetch, trace = () => { }) {
     const audience = "yandex-pulse-rc-ingest", workflow = "pulse2-rc-dispatch.yml";
+    let stage = 'jwt_shape';
+    const deny = (code) => { trace(code); return null; };
     try {
         if (!token || token.length > 12000)
-            return null;
+            return deny('jwt_shape');
         const parts = token.split(".");
         if (parts.length !== 3)
-            return null;
+            return deny("jwt_shape");
+        stage = "jwt_decode";
         const header = JSON.parse(new TextDecoder().decode(b64url(parts[0])));
         const claims = JSON.parse(new TextDecoder().decode(b64url(parts[1])));
+        trace("jwt_decode_ok");
+        stage = "claims";
         const seconds = Math.floor(now / 1000);
         if (header.alg !== "RS256" || !header.kid || !Number.isInteger(claims.exp) ||
             claims.exp <= seconds || claims.exp > seconds + 600 ||
@@ -86,24 +91,104 @@ export async function githubOidcIdentity(token, now = Date.now(), load = fetch) 
             typeof claims.jti !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(claims.jti) ||
             (claims.job_workflow_ref && claims.job_workflow_ref !== claims.workflow_ref) ||
             claims.workflow_ref !== `Okelii77/yandex-pulse/.github/workflows/${workflow}@refs/heads/research/pulse-architecture-20261128`)
-            return null;
+            return deny("claims_rejected");
+        trace("claims_ok");
+        stage = "jwks_fetch";
         const response = await load("https://token.actions.githubusercontent.com/.well-known/jwks", {
             cache: 'no-store', redirect: "error", signal: AbortSignal.timeout(5000)
         });
+        trace("jwks_http", response.status);
         if (!response.ok)
-            return null;
+            return deny("jwks_http_rejected");
+        stage = "jwks_json";
         const jwks = await response.json();
+        stage = "jwks_key";
         const jwk = (jwks.keys || []).find((x) => x.kid === header.kid && x.kty === "RSA" && x.use === "sig");
         if (!jwk)
-            return null;
+            return deny("jwks_key_missing");
+        trace("jwks_key_ok");
+        stage = "rsa_import";
         const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+        trace("rsa_import_ok");
+        stage = "rsa_verify";
         const signed = new TextEncoder().encode(parts[0] + "." + parts[1]);
         if (!await crypto.subtle.verify({ name: "RSASSA-PKCS1-v1_5" }, key, b64url(parts[2]), signed))
-            return null;
+            return deny("rsa_signature_invalid");
+        trace("rsa_verify_ok");
         return { owner: String(claims.run_id) + ":" + String(claims.run_attempt), jti: claims.jti, expires: claims.exp * 1000 };
     }
     catch {
-        return null;
+        return deny(stage + "_exception");
+    }
+}
+// Private, bounded diagnostic evidence; no raw claims, kid, JWT, URL or headers.
+const OIDC_DIAG_VERSION = "rc2-oidc-diagnostic-1";
+async function auditOidc(db, now, ray, steps) {
+    try {
+        if (!await reserveBudget(db, now, 0, 0, 80, 4))
+            return;
+        const day = Math.floor(now / DAY) * DAY;
+        await db.prepare("INSERT INTO rc_oidc_diag(day,at,ray,steps) SELECT ?,?,?,? WHERE (SELECT count(*) FROM rc_oidc_diag WHERE day=?)<64").bind(day, now, /^[0-9a-f]{16,32}(?:-[A-Z]{3})?$/.test(ray) ? ray : "", JSON.stringify(steps), day).run();
+    }
+    catch {
+        console.warn("RC2_OIDC_DIAG_STORE_FAILED");
+    }
+}
+async function probeRuntime(db, now) {
+    // The sole row must be explicitly armed by the account operator. No public result.
+    const claim = await db.prepare("UPDATE rc_oidc_probe SET state='running' WHERE id=1 AND state='armed' AND expires>? RETURNING id").bind(now).first();
+    if (!claim)
+        return;
+    const out = { version: OIDC_DIAG_VERSION, timeout_available: typeof AbortSignal.timeout === "function", crypto_available: !!crypto.subtle, checks: [] };
+    try {
+        for (const mode of ["original", "explicit_headers"]) {
+            const row = { mode };
+            out.checks.push(row);
+            let stage = "fetch";
+            try {
+                const init = { redirect: "error", signal: AbortSignal.timeout(5000) };
+                if (mode === "original")
+                    init.cache = "no-store";
+                else
+                    init.headers = { "Cache-Control": "no-cache", "User-Agent": "YandexPulse-Scheduler/2.0", "Accept": "application/json" };
+                const r = await fetch("https://token.actions.githubusercontent.com/.well-known/jwks", init);
+                row.http = r.status;
+                if (!r.ok)
+                    continue;
+                stage = "json";
+                const jwks = await r.json();
+                row.keys = Array.isArray(jwks.keys) ? jwks.keys.length : 0;
+                row.rsa_sig = 0;
+                row.rsa_without_use = 0;
+                row.import_ok = 0;
+                row.verify_false = 0;
+                for (const k of (Array.isArray(jwks.keys) ? jwks.keys : []).slice(0, 16)) {
+                    if (k.kty !== "RSA")
+                        continue;
+                    if (k.use === "sig")
+                        row.rsa_sig++;
+                    else if (k.use === undefined)
+                        row.rsa_without_use++;
+                    else
+                        continue;
+                    stage = "import";
+                    const key = await crypto.subtle.importKey("jwk", k, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+                    row.import_ok++;
+                    stage = "verify";
+                    const bits = key.algorithm.modulusLength;
+                    if (!await crypto.subtle.verify({ name: "RSASSA-PKCS1-v1_5" }, key, new Uint8Array(bits / 8), new Uint8Array([1, 2, 3])))
+                        row.verify_false++;
+                }
+                row.done = true;
+            }
+            catch (e) {
+                row.failure = stage;
+                row.kind = e instanceof TypeError ? "TypeError" : e instanceof DOMException ? e.name === "AbortError" ? "AbortError" : e.name === "TimeoutError" ? "TimeoutError" : "DOMException" : "Other";
+            }
+        }
+    }
+    finally {
+        await db.prepare("UPDATE rc_oidc_probe SET state='done',result=? WHERE id=1 AND state='running'").bind(JSON.stringify(out)).run();
     }
 }
 // Conservative application reservations, not account-wide billing counters.
@@ -266,10 +351,35 @@ async function authorized(req, env) {
     const token = req.headers.get("Authorization") || "";
     if (env.RC_LOCAL_ONLY === "1")
         return env.LOCAL_TOKEN && token === "Bearer " + env.LOCAL_TOKEN ? { owner: "fixture" } : null;
-    if (!token.startsWith("Bearer "))
+    const steps = [];
+    const trace = (code, status) => steps.push(status === undefined ? { code } : { code, status });
+    if (!token.startsWith("Bearer ")) {
+        trace("authorization_missing_or_scheme");
         return null;
-    const id = await githubOidcIdentity(token.slice(7));
-    return id && await consumeOidc(env.DB, id) ? { owner: id.owner } : null;
+    }
+    trace("authorization_ok");
+    try {
+        const id = await githubOidcIdentity(token.slice(7), Date.now(), fetch, trace);
+        if (!id)
+            return null;
+        trace("d1_consume_begin");
+        try {
+            if (!await consumeOidc(env.DB, id)) {
+                trace("d1_replay");
+                return null;
+            }
+        }
+        catch {
+            trace("d1_consume_exception");
+            return null;
+        }
+        trace("d1_consume_ok");
+        return { owner: id.owner };
+    }
+    finally {
+        console.log("RC2_OIDC_INTERNAL", JSON.stringify(steps));
+        await auditOidc(env.DB, Date.now(), req.headers.get("CF-Ray") || "", steps);
+    }
 }
 export default {
     async scheduled(_event, env, ctx) { if (env.RC_ENABLE_DISPATCH !== "1")
@@ -282,10 +392,15 @@ export default {
                 return new Response(null, { status: 204, headers: cors });
             if (path.startsWith("/api/") && !await reserveBudget(env.DB, now, 1, 0, 32, 2))
                 return response({ error: "staging_budget_exhausted" }, 429, { ...cors, "Retry-After": "3600" });
+            if (req.method === "POST" && path === "/api/rc/oidc-probe") {
+                if (await reserveBudget(env.DB, now, 0, 0, 128, 8))
+                    await probeRuntime(env.DB, now);
+                return response({ error: "not_found" }, 404, cors);
+            }
             if (req.method === "GET" && path === "/api/health") {
                 const row = await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();
                 const lease = await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();
-                return response({ ok: true, version: "2.0.0-rc.2", environment: "staging", mode: env.RC_MODE || "synthetic", trigger_ready: !!(env.RC_ENABLE_DISPATCH === "1" && env.RC_GITHUB_TOKEN && env.RC_TURNSTILE_SECRET && env.RC_TURNSTILE_SITE_KEY), last_observation: row?.generated_at || null, stale: !row || now - Date.parse(row.generated_at) > 90 * 60000, last_slot: row?.slot || null, lease: lease ? { slot: lease.slot, state: lease.state, expires: iso(lease.expires), dispatch_ms: lease.dispatch_ms, runner_wait_ms: lease.started_at && lease.dispatch_at ? Math.max(0, lease.started_at - lease.dispatch_at) : null, started_at: lease.started_at ? iso(lease.started_at) : null, finished_at: lease.finished_at ? iso(lease.finished_at) : null } : null }, 200, cors);
+                return response({ ok: true, version: "2.0.0-rc.2", build: OIDC_DIAG_VERSION, environment: "staging", mode: env.RC_MODE || "synthetic", trigger_ready: !!(env.RC_ENABLE_DISPATCH === "1" && env.RC_GITHUB_TOKEN && env.RC_TURNSTILE_SECRET && env.RC_TURNSTILE_SITE_KEY), last_observation: row?.generated_at || null, stale: !row || now - Date.parse(row.generated_at) > 90 * 60000, last_slot: row?.slot || null, lease: lease ? { slot: lease.slot, state: lease.state, expires: iso(lease.expires), dispatch_ms: lease.dispatch_ms, runner_wait_ms: lease.started_at && lease.dispatch_at ? Math.max(0, lease.started_at - lease.dispatch_at) : null, started_at: lease.started_at ? iso(lease.started_at) : null, finished_at: lease.finished_at ? iso(lease.finished_at) : null } : null }, 200, cors);
             }
             if (req.method === "GET" && path === "/api/status") {
                 const row = await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();
