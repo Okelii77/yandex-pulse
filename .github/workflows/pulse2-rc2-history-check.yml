@@ -1,4 +1,4 @@
-name: RC2 cloud history revision verification
+name: RC2 cloud history and one-shot Turnstile verification
 on:
   push:
     branches: ['research/pulse-architecture-20261128']

@@ -32,7 +32,23 @@ for k in delta['remove']:merged.pop(k,None)
 assert merged==full['series']
 req(path,304,dt)
 fallback,_,_=req('/api/history?since=999-1');assert fallback==full
+point_path=path+'&format=points-v1'
+point,pt,ps=req(point_path)
+if point.get('format')=='points-v1':
+    merged=dict(old['series'])
+    for k in point['remove']:merged.pop(k,None)
+    for k,patch in point['patch'].items():
+        by={x[0]:x for x in merged.get(k,[])}
+        for stamp in patch['drop']:by.pop(stamp,None)
+        for x in patch['upsert']:by[x[0]]=x
+        merged[k]=sorted(by.values(),key=lambda x:x[0])
+    assert merged==full['series']
+    req(point_path,304,pt)
+else:assert point==full
+assert ps<=size,(ps,size)
+print('RC2_POINTS_WIRE',json.dumps(dict(format=point.get('format','full'),bytes=ps,full_bytes=size)))
 req('/api/trigger',403,method='POST',origin='https://invalid.example',body=b'{}')
+req('/api/trigger',503,method='POST',origin=BASE,body=b'{"turnstileToken":"invalid-test"}')
 req('/api/trigger',503,method='POST',origin=BASE,body=b'{"turnstileToken":"invalid-test"}')
 req('/api/ynison/acquire',403,method='POST',body=b'{}')
 print('RC2_CLOUD_HISTORY',json.dumps(dict(revision=full['revision'],old_revision=old['revision'],series=30,points=60,duplicate_points=0,full_bytes=size,delta_bytes=ds,delta_304=True,unknown_base_fallback=True,origin_rejected=True,dispatch_disabled=True)))
