@@ -23,7 +23,7 @@ with tempfile.TemporaryDirectory() as d:
   elif c['kind'] in ('http','http_gateway'):
    code=403 if c['id']=='cloud-storage' else 503 if c['id']=='other-weather' else 429 if c['id']=='search-web' else 200
    path='redirect' if c['id']=='music-web' else 'bad-redirect' if c['id']=='other-market' else str(code)
-   c['url']=f'http://127.0.0.1:{a.server_port}/{path}';expected[c['id']]='down' if code==503 or path=='bad-redirect' else 'degraded' if code in (403,429) else 'ok'
+   c['url']=f'https://127.0.0.1:{b.server_port}/{path}' if c['id']=='music-catalog' else f'http://127.0.0.1:{a.server_port}/{path}';expected[c['id']]='down' if code==503 or path=='bad-redirect' else 'degraded' if code in (403,429) else 'ok'
   else:adapters.append(dict(id=c['id'],status='disabled' if c['id'] in ('music-ynison','maps-geocoder','ai-speech','ai-vision') else 'not_configured',checked_at='2026-11-28T00:00:00Z',latency_ms=None))
  f=p/'catalog.json';f.write_text(json.dumps(fixture));env=dict(os.environ,PULSE_FIXTURE_CA=str(p/'ca.pem'))
  data={};payload=None
@@ -45,5 +45,12 @@ with tempfile.TemporaryDirectory() as d:
   rr=json.loads(sp.check_output([str(root/cmd),'fixture',str(badfile)],env=env,timeout=25))
   statuses={x['id']:x['status'] for x in rr['results']}
   assert all(statuses[x]=='down' for x in ('mail-imap','mail-smtp','music-catalog'))
+ # Real TLS chain verification: wrong root, not just a plaintext protocol failure.
+ openssl('req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(p/'wrong.key'),'-out',str(p/'wrong.pem'),'-days','1','-subj','/CN=Unrelated test CA','-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign')
+ for cmd in ('target/release/pulse-core-rc','core-go'):
+  rr=json.loads(sp.check_output([str(root/cmd),'fixture',str(f)],env=dict(env,PULSE_FIXTURE_CA=str(p/'wrong.pem'),PULSE_FIXTURE_SYSTEM_ROOTS='0'),timeout=25))
+  statuses={x['id']:x['status'] for x in rr['results']}
+  assert all(statuses[x]=='down' for x in ('mail-imap','mail-smtp','music-catalog')),statuses
+ print('RC2 wrong CA rejection passed for HTTPS, IMAP and SMTP in both clients')
  for s in (a,b):s.shutdown();s.server_close()
  pathlib.Path('native-results.json').write_text(json.dumps(data,indent=2));pathlib.Path('fixture-status.json').write_text(json.dumps(payload));print('RC_NATIVE',json.dumps(data))

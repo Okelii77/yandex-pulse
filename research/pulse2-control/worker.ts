@@ -71,7 +71,7 @@ async function githubOidcValid(token: string, audience="yandex-pulse-rc-ingest",
     const seconds=Math.floor(Date.now()/1000);
     if(header.alg!=="RS256"||!header.kid||!Number.isInteger(claims.exp)||
        claims.exp<=seconds||claims.exp>seconds+600 ||
-       claims.nbf>seconds || claims.iat>seconds+30 ||
+       !Number.isInteger(claims.nbf)||!Number.isInteger(claims.iat)||claims.nbf>seconds || claims.iat>seconds+30 ||
        claims.iss!=="https://token.actions.githubusercontent.com" ||
        claims.aud!==audience ||
        claims.repository!=="Okelii77/yandex-pulse" ||
@@ -106,6 +106,7 @@ export async function start(db:DB,claim:{slot:number;token:string},now:number){
 export async function publish(db:DB,claim:{slot:number;token:string},input:any,now:number){
  const data=safeStatus(input);
  if(data.checks.length!==34||new Set(data.checks.map((x:any)=>x.id)).size!==34||new Set(data.results.map((x:any)=>x.id)).size!==34||data.checks.some((x:any)=>!CATALOG_IDS.has(x.id))||data.results.some((x:any)=>!CATALOG_IDS.has(x.id)))throw Error("catalog_incomplete");
+ if(["synthetic","real"].includes(input.data_mode))(data as any).data_mode=input.data_mode;
  data.generated_at=iso(Date.parse(data.generated_at));for(const r of data.results)r.checked_at=iso(Date.parse(r.checked_at));
  if(!Number.isSafeInteger(claim.slot)||typeof claim.token!=="string"||claim.slot!==epoch(claim.slot)||Date.parse(data.generated_at)<claim.slot||Date.parse(data.generated_at)>now+60000)throw Error("invalid_observation");
  if(data.results.some((x:any)=>Date.parse(x.checked_at)>Date.parse(data.generated_at)+60000))throw Error("future_component");
@@ -179,7 +180,7 @@ export default {
  try{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors});
  if(req.method==="GET"&&path==="/api/health"){const row=await env.DB.prepare("SELECT slot,generated_at FROM rc_latest WHERE id=1").first();const lease=await env.DB.prepare("SELECT slot,state,expires,started_at,dispatch_at,dispatch_ms,finished_at FROM rc_lease ORDER BY slot DESC LIMIT 1").first();return response({ok:true,version:"2.0.0-rc.2",environment:"staging",mode:env.RC_MODE||"synthetic",trigger_ready:!!(env.RC_ENABLE_DISPATCH==="1"&&env.RC_GITHUB_TOKEN&&env.RC_TURNSTILE_SECRET&&env.RC_TURNSTILE_SITE_KEY),last_observation:row?.generated_at||null,stale:!row||now-Date.parse(row.generated_at)>90*60000,last_slot:row?.slot||null,lease:lease?{slot:lease.slot,state:lease.state,expires:iso(lease.expires),dispatch_ms:lease.dispatch_ms,runner_wait_ms:lease.started_at&&lease.dispatch_at?Math.max(0,lease.started_at-lease.dispatch_at):null,started_at:lease.started_at?iso(lease.started_at):null,finished_at:lease.finished_at?iso(lease.finished_at):null}:null},200,cors);}
- if(req.method==="GET"&&path==="/api/status"){const row=await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();if(!row)return response({error:"waiting"},503,cors);const tag='"s-'+row.revision+'"';return req.headers.get("If-None-Match")===tag?response(null,304,{...cors,ETag:tag}):response({...JSON.parse(row.payload),environment:"staging",data_mode:env.RC_MODE||"synthetic"},200,{...cors,ETag:tag});}
+ if(req.method==="GET"&&path==="/api/status"){const row=await env.DB.prepare("SELECT revision,payload FROM rc_latest WHERE id=1").first();if(!row)return response({error:"waiting"},503,cors);const tag='"s-'+row.revision+'"';return req.headers.get("If-None-Match")===tag?response(null,304,{...cors,ETag:tag}):response({...JSON.parse(row.payload),environment:"staging",data_mode:JSON.parse(row.payload).data_mode||"synthetic"},200,{...cors,ETag:tag});}
  if(req.method==="GET"&&path==="/api/history")return await history(env.DB,req,now,cors);
  if(req.method==="POST"&&path==="/api/trigger"){const result=await manualTrigger(req,env,now);return new Response(result.body,{status:result.status,headers:{...Object.fromEntries(result.headers.entries()),...cors}});}
  if(req.method==="GET"&&path==="/api/ynison/status")return response({schema:1,automatic:false,last_diagnostic:null,retry_after_at:null,available:false,reason:"shared_gate_not_authorized_for_staging"},200,cors);
@@ -190,7 +191,7 @@ export default {
  if(path.endsWith("acquire")){const claim=await acquire(env.DB,now);return response(claim||{error:"busy"},claim?200:409,cors);}
  if(Number(req.headers.get("Content-Length")||0)>100000)return response({error:"too_large"},413,cors);
  const raw=await req.text();if(new TextEncoder().encode(raw).length>100000)return response({error:"too_large"},413,cors);
- const data=JSON.parse(raw);if(path.endsWith("/start")){const ok=await start(env.DB,data.claim,now);return response({ok},ok?200:409,cors);}const ok=await publish(env.DB,data.claim,data.payload,now);return response({ok},ok?200:409,cors);}
+ const data=JSON.parse(raw);if(path.endsWith("/start")){const ok=await start(env.DB,data.claim,now);return response({ok},ok?200:409,cors);}const mode=env.RC_MODE||"synthetic";if(env.RC_LOCAL_ONLY!=="1"&&data.payload?.data_mode!==mode)return response({error:"mode_mismatch"},422,cors);const ok=await publish(env.DB,data.claim,data.payload,now);return response({ok},ok?200:409,cors);}
  if(req.method==="GET"&&path==="/api-config.js")return new Response("window.PULSE_API_CONFIG="+JSON.stringify({apiUrl:url.origin,turnstileSiteKey:env.RC_TURNSTILE_SITE_KEY||"",staging:true})+";",{headers:{"Content-Type":"application/javascript","Cache-Control":"no-store"}});
  if(req.method==="GET"&&!path.startsWith("/api/")&&env.ASSETS)return env.ASSETS.fetch(req);
  return response({error:"not_found"},404,cors);

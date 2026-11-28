@@ -21,6 +21,8 @@ def main():
  def call(path,body=None,auth=False):
   q=urllib.request.Request(base+path,data=None if body is None else json.dumps(body).encode(),method='GET' if body is None else 'POST',headers={'Content-Type':'application/json',**({'Authorization':'Bearer '+token} if auth else {})})
   with opener.open(q,timeout=20) as r:return json.load(r)
+ mode='real' if os.environ.get('PULSE_RC_REAL_APPROVED')=='1' else 'synthetic'
+ if call('/api/health').get('mode')!=mode:raise RuntimeError('staging mode mismatch')
  slot,lease=os.environ.get('PULSE_RC_SLOT',''),os.environ.get('PULSE_RC_LEASE','')
  if bool(slot)!=bool(lease):raise RuntimeError('invalid dispatch claim')
  try:
@@ -44,6 +46,7 @@ def main():
  else:
   stamp=dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds').replace('+00:00','Z')
   data=dict(catalog,generated_at=stamp,results=[dict(id=c['id'],status='disabled' if c['kind']=='music_ynison' or c['id'] in ('maps-geocoder','ai-speech','ai-vision') else 'not_configured',checked_at=stamp,latency_ms=None,reason='staging synthetic schedule only') for c in catalog['checks']])
+ data['data_mode']=mode
  print('RC core_ms',round((time.monotonic()-began)*1000))
  upload=time.monotonic()
  if call('/api/rc/ingest',{'claim':claim,'payload':data},True).get('ok') is not True:raise RuntimeError('ingest rejected')

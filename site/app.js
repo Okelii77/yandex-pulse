@@ -332,7 +332,7 @@
     const last=x?.last_diagnostic;
     const outcomes={ok:"Подтверждено состояние с текущим треком",no_data:"Получено состояние без текущего трека",error:"Ошибка диагностики",timeout:"Истекло время ожидания",unknown:"Результат не определён"};
     const names={python:"Python · MarshalX",javascript:"JavaScript · wire"};
-    const title=x?.unavailable?"Данные ручной диагностики недоступны":last?(outcomes[last.outcome]||"Результат не определён"):"Новый ручной результат пока не опубликован";
+    const title=x?.available===false?"Диагностика недоступна в staging: общий Gate не авторизован":x?.unavailable?"Данные ручной диагностики недоступны":last?(outcomes[last.outcome]||"Результат не определён"):"Новый ручной результат пока не опубликован";
     return '<div class="detail-stat ynison-diagnostic"><span>Последняя ручная диагностика · отдельный результат</span><strong>'+esc(title)+'</strong>'+
       (last?'<p>'+esc(names[last.client]||"Клиент")+' · '+esc(fmtDate(last.checked_at))+'</p>':"")+
       (x?.retry_after_at?'<p>Следующая попытка не раньше '+esc(fmtDate(x.retry_after_at))+'</p>':"")+

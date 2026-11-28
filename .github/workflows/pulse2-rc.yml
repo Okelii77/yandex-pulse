@@ -30,7 +30,7 @@ jobs:
           go version
           python --version
           wc -c core-go target/release/pulse-core-rc
-          python test_native.py && python test_music.py
+          python test_native.py && python test_music.py && python test_adapters.py
       - name: Native payload through D1 and browser
         working-directory: research/pulse2-control
         run: |
