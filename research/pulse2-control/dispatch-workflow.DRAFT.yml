@@ -19,15 +19,16 @@ jobs:
     timeout-minutes: 8
     environment: pulse-rc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.12'
-      - run: python -m pip install -r monitor/requirements.txt
+          python-version: '3.12.16'
       - if: vars.PULSE_RC_REAL_APPROVED == '1'
-        run: cargo build --release --locked --manifest-path research/pulse2-rc/Cargo.toml
+        run: python -m pip install --require-hashes -r research/pulse2-control/requirements.lock
+      - if: vars.PULSE_RC_REAL_APPROVED == '1'
+        run: rustup toolchain install 1.100.1 --profile minimal && cargo +1.100.1 build --release --locked --manifest-path research/pulse2-rc/Cargo.toml
       - run: python research/pulse2-control/run-approved.py
         env:
           PULSE_RC_STAGE_APPROVED: ${{ vars.PULSE_RC_STAGE_APPROVED }}

@@ -3,7 +3,7 @@ import {Miniflare} from 'miniflare';import assert from 'node:assert/strict';impo
 const out=[];
 for(const lang of ['rust','go']){
  const mf=new Miniflare({modules:true,scriptPath:process.cwd()+'/dist/worker.js',compatibilityDate:'2026-07-01',d1Databases:{DB:'rc-full-'+lang},bindings:{RC_LOCAL_ONLY:'1',LOCAL_TOKEN:'fixture-only'},cf:false});
- let chrome,ws,server,profile;try{
+ let chrome,ws,server,profile,chromeLog='';try{
   await mf.ready;const db=await mf.getD1Database('DB');for(const sql of (await readFile('schema.sql','utf8')).trim().split(/;\s*/).filter(Boolean))await db.prepare(sql).run();
   const source=JSON.parse(await readFile('../pulse2-rc/fixture-status-'+lang+'.json','utf8'));
   assert.equal(source.results.length,34);
@@ -23,8 +23,8 @@ for(const lang of ['rust','go']){
     const b=await readFile(new URL('../../site/'+f,import.meta.url));res.writeHead(200,{'Content-Type':mime[extname(f)]||'application/octet-stream'});res.end(b);
     }catch{res.writeHead(404);res.end();}
   });await new Promise(r=>server.listen(0,'127.0.0.1',r));origin='http://127.0.0.1:'+server.address().port;
-  profile=await mkdtemp(join(tmpdir(),'pulse-rc-chrome-'));chrome=spawn('google-chrome',['--headless=new','--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--disable-gpu','--no-first-run','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore'});
-  async function until(fn){for(let i=0;i<150;i++){try{const v=await fn();if(v)return v}catch{}await sleep(50)}throw Error('timeout')}
+  profile=await mkdtemp(join(tmpdir(),'pulse-rc-chrome-'));chrome=spawn('google-chrome',['--headless=new','--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--disable-gpu','--no-first-run','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:['ignore','ignore','pipe']});chrome.stderr.on('data',x=>{chromeLog=(chromeLog+x.toString()).slice(-4000)});
+  async function until(fn){for(let i=0;i<600;i++){try{const v=await fn();if(v)return v}catch{}await sleep(50)}throw Error('browser readiness timeout: '+chromeLog)}
   const port=await until(async()=>Number((await readFile(join(profile,'DevToolsActivePort'),'utf8')).split('\n')[0]));const target=await (await fetch('http://127.0.0.1:'+port+'/json/new?about:blank',{method:'PUT'})).json();ws=new WebSocket(target.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{ws.addEventListener('open',resolve,{once:true});ws.addEventListener('error',reject,{once:true})});
   let id=0;const pending=new Map();const send=(method,params={})=>new Promise((resolve,reject)=>{const n=++id;pending.set(n,{resolve,reject});ws.send(JSON.stringify({id:n,method,params}))});
   ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result)}if(m.method==='Fetch.requestPaused'){const p=m.params,ok=p.request.url.startsWith(origin+'/');send(ok?'Fetch.continueRequest':'Fetch.failRequest',ok?{requestId:p.requestId}:{requestId:p.requestId,errorReason:'BlockedByClient'}).catch(()=>{})}});
